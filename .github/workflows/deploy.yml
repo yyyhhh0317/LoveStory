@@ -27,6 +27,18 @@ jobs:
 
       - run: npm ci
 
+      - name: 检查 Supabase 配置
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::缺少 VITE_SUPABASE_URL 或 VITE_SUPABASE_ANON_KEY。"
+            echo "没有这两个变量，构建不会失败，但会上线成「本地模式」——每个访客看到的是各自的空相册。"
+            echo "请在仓库 Settings → Secrets and variables → Actions 里添加这两个 secret。"
+            exit 1
+          fi
+
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}

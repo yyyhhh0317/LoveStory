@@ -321,8 +321,13 @@ textarea {
   margin-top: -212px;
   cursor: pointer;
   transform-origin: center;
-  /* 视距取书宽的 6 倍左右：再近，翻开时就成了「一扇门」在转 */
-  perspective: 1900px;
+  /*
+   * 视距：封面翻开时会朝镜头方向翻出 300px 左右，视距一近，
+   * 书口一侧就被透视放大 15% 以上 —— 整个封面读起来是个梯形，
+   * 侧壁和外皮/内皮也对不齐。3400px（书宽 10 倍出头）时
+   * 翻开全程两个面都能保持矩形，厚度依然看得见。
+   */
+  perspective: 3400px;
   perspective-origin: 50% 46%;
   animation: album-in 1s var(--ease) 0.05s both;
   /* 旋转期间整本一起进合成层，避免逐帧反复提交 */
@@ -1294,8 +1299,17 @@ textarea {
   animation: soft-rise 0.32s var(--ease) 0.24s both;
 }
 
-.viewer.is-flight .annot {
-  animation: soft-rise 0.36s var(--ease) 0.3s both;
+/*
+ * 留言栏的入场淡入只在桌面端（常驻侧栏）应用。
+ * 移动端留言板是靠 transform 收起的抽屉，任何 fill 动画的
+ * transform 终点都会把收起的抽屉顶开、且关不回去
+ * （soft-rise 的 to { transform: none } + fill: both 正是这个效果），
+ * 所以这条规则必须隔离在桌面端，不能让它落到抽屉头上。
+ */
+@media (min-width: 901px) {
+  .viewer.is-flight .annot {
+    animation: soft-rise 0.36s var(--ease) 0.3s both;
+  }
 }
 
 .viewer.is-flight .viewer-caption {

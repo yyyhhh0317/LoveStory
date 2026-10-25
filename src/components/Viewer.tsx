@@ -59,6 +59,13 @@ export function Viewer({
   const [flew] = useState(Boolean(origin) && !prefersReducedMotion())
   const [flight, setFlight] = useState<{ from: FrameRect; to: FrameRect; src: string } | null>(null)
   const [landed, setLanded] = useState(!flew)
+  /* 飞行动画已走完（FlightPhoto 的 onDone），等真图就绪后一起原子落地 */
+  const [flightDone, setFlightDone] = useState(false)
+  /* 真图已经解码完，可以和飞行层无缝交换 */
+  const [imgReady, setImgReady] = useState(false)
+  /* 氛围层挂载开关：刻意错开落地那一帧（见下方 effect） */
+  const [ambienceOn, setAmbienceOn] = useState(!flew)
+  const imgRef = useRef<HTMLImageElement>(null)
   /*
    * 翻书方向。
    *
@@ -164,6 +171,45 @@ export function Viewer({
   }, [])
 
   /*
+   * 落地必须「原子」：飞行层卸载和真图显形要发生在同一帧。
+   * 原来是动画一结束就删飞行层，真图再花 180ms 从透明淡进来 ——
+   * 中间那段时间照片半透明、暗底透出来，这就是「放大完闪一下」。
+   * 现在等两件事都齐了才落地：动画走完 + 真图解码完。
+   * 慢网兜底：最多再多等 1s，期间飞行层冻结在终点
+   * （fill: forwards），看起来就是照片已经放好了，不会露底。
+   */
+  useEffect(() => {
+    if (!flightDone || landed) return
+    const land = () => {
+      setFlight(null)
+      setLanded(true)
+    }
+    if (imgReady) {
+      land()
+      return
+    }
+    const t = window.setTimeout(land, 1000)
+    return () => window.clearTimeout(t)
+  }, [flightDone, imgReady, landed])
+
+  /*
+   * 氛围层是一块 2300×2300 的合成层，新分配图层要几十毫秒。
+   * 原来正好挂在落地那一帧，和换图撞在一起，就是卡那一下。
+   * 推迟一拍再挂：它本来就慢慢淡入，看不出是后来的。
+   */
+  useEffect(() => {
+    if (!landed || ambienceOn) return
+    const t = window.setTimeout(() => setAmbienceOn(true), 140)
+    return () => window.clearTimeout(t)
+  }, [landed, ambienceOn])
+
+  /* 缓存图可能赶在 onLoad 挂上之前就解码完，兜一层 complete 检查 */
+  useEffect(() => {
+    const el = imgRef.current
+    if (el && el.complete && el.naturalWidth > 0) setImgReady(true)
+  }, [photo?.id, fullUrl, thumbUrl])
+
+  /*
    * 把背景平均亮度拉到 0.32 附近：暗照片提亮、亮照片压暗。
    * 上限 1.55 是刻意的——再高，深色夜景会被抬得比照片本身还亮，
    * 照片就从「主体」变成了「一块暗补丁」。
@@ -249,7 +295,7 @@ export function Viewer({
         正好和飞行层的首帧撞在一起，就是那下卡顿。等照片落地再挂上，
         它本来也是慢慢淡入的，看不出是后来的。
       */}
-      {thumbUrl && landed && (
+      {thumbUrl && ambienceOn && (
         <div
           key={photo.id}
           className="viewer-ambience"
@@ -321,15 +367,18 @@ export function Viewer({
             }}
           >
             <img
+              ref={imgRef}
               key={photo.id}
+              onLoad={() => setImgReady(true)}
               className={!isFirstShot && flip && turn !== 0 ? 'is-turn' : undefined}
               style={{
                 ...(!isFirstShot && flip && turn !== 0
                   ? { ['--turn' as string]: String(turn) }
                   : {}),
-                // 飞行层落地的同一帧换成真图，两者位置像素级对齐，看不出接缝
+                // 飞行层落地的同一帧换成真图，两者位置像素级对齐，看不出接缝。
+                // transition 必须关掉：淡入会让交换那几帧半透明，就是「闪一下」
                 ...(isFirstShot
-                  ? { animation: 'none', opacity: landed ? 1 : 0 }
+                  ? { animation: 'none', opacity: landed ? 1 : 0, transition: 'none' }
                   : {}),
               }}
               src={fullUrl ?? thumbUrl ?? undefined}
@@ -420,10 +469,8 @@ export function Viewer({
           from={flight.from}
           to={flight.to}
           src={flight.src}
-          onDone={() => {
-            setFlight(null)
-            setLanded(true)
-          }}
+          /* 只标记「动画完了」，落地由上面等真图就绪的 effect 统一做 */
+          onDone={() => setFlightDone(true)}
         />
       )}
     </div>

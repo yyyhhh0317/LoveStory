@@ -3,17 +3,27 @@ import { useImgUrl } from '../hooks/useImgUrl'
 import type { Photo } from '../lib/types'
 
 interface Props {
-  cover: Photo | null
+  /** 封面下面那一页放的照片：相册第一张 */
+  page: Photo | null
   count: number
-  onOpen: () => void
+  onOpen: (photoId: string | null, rect: DOMRect | null) => void
 }
 
-/** 封面掀开的时长，和 CSS 里的 transition 对齐 */
-const OPEN_MS = 500
+/** 封面转开的时长，和 CSS 里的 transition 对齐 */
+const SWING_MS = 360
+/** 转开之后停一下，让眼睛认出「翻开后露出的是一页照片」，再让它飞出去 */
+const HOLD_MS = 140
+/** 合回去的时机：这时沉浸视图已经完全不透明地盖住上面了，复位看不见 */
+const RESET_MS = 1900
 
-export function AlbumBook({ cover, count, onOpen }: Props) {
-  const url = useImgUrl(cover?.storageKey ?? null, 'thumb')
+const HEART =
+  'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 ' +
+  '19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'
+
+export function AlbumBook({ page, count, onOpen }: Props) {
+  const url = useImgUrl(page?.storageKey ?? null, 'thumb')
   const [opening, setOpening] = useState(false)
+  const pageRef = useRef<HTMLImageElement>(null)
   const timers = useRef<number[]>([])
 
   useEffect(() => {
@@ -24,26 +34,33 @@ export function AlbumBook({ cover, count, onOpen }: Props) {
   }, [])
 
   /*
-   * 掀开封面，再进沉浸视图。
+   * 掀开 → 露一页 → 那张照片飞出去。
    *
-   * 顺序很重要：先把封面转开，等它转到一半（430ms）再挂上沉浸视图，
-   * 那里的淡入正好接在后面，看起来就是「书被翻开、光透进来」。
+   * 三步必须分开，不能合成一个：
+   * 1. 封面绕书脊转开（360ms）
+   * 2. 停 140ms —— 这一下是给眼睛的。「翻开」和「放大」如果同时发生，
+   *    看到的就是一张照片凭空变大，翻书这个动作就白做了。
+   * 3. 把内页那张图当前的屏幕位置交给上层，由沉浸视图接着飞。
    *
-   * 空相册不演这段 —— 那时 onOpen 只会弹一句「相册还空着」，
-   * 书白翻一次会让人以为点开了什么。
+   * 位置在第 2 步结束时才量：封面一转开，整本书会因为 translateY 挪几像素，
+   * 提前量会差一点。
    *
-   * 1500ms 后复位：这时沉浸视图已经完全不透明地盖在上面，
-   * 复位是看不见的；等你退出来，书已经合好了。
+   * 空相册不演这段 —— 那时 onOpen 只会弹一句「相册还空着」。
    */
   const open = () => {
     if (opening) return
-    if (count === 0) {
-      onOpen()
+    if (count === 0 || !page) {
+      onOpen(null, null)
       return
     }
     setOpening(true)
-    timers.current.push(window.setTimeout(onOpen, OPEN_MS))
-    timers.current.push(window.setTimeout(() => setOpening(false), 1500))
+    timers.current.push(
+      window.setTimeout(() => {
+        const rect = pageRef.current?.getBoundingClientRect() ?? null
+        onOpen(page.id, rect)
+      }, SWING_MS + HOLD_MS)
+    )
+    timers.current.push(window.setTimeout(() => setOpening(false), RESET_MS))
   }
 
   return (
@@ -60,19 +77,75 @@ export function AlbumBook({ cover, count, onOpen }: Props) {
       }}
       aria-label={`打开珍藏相册，共 ${count} 张`}
     >
-      <div className="album-pages" />
-      <div className="album-cover">
-        <div className="album-label">
-          <h2>珍藏</h2>
-          <span>{count > 0 ? `${count} FRAMES` : 'EMPTY'}</span>
-        </div>
-        <div className="album-photo">
+      {/* 封面下面那一页：一直渲染着（否则量不到位置），平时被封面盖住 */}
+      <div className="album-pages">
+        <div className="album-page">
           {url ? (
-            <img src={url} alt="相册封面" draggable={false} />
+            <img
+              ref={pageRef}
+              className="album-page-photo"
+              src={url}
+              alt=""
+              draggable={false}
+            />
           ) : (
-            <div className="placeholder">还空着</div>
+            <span className="album-page-empty">还空着</span>
           )}
         </div>
+      </div>
+
+      {/*
+        封面是两张纸板：正面和背面在 Z 轴上分开 3.2px。
+        转过 90° 时看到的不是「什么都没有」，而是背板 + 两条 1px 边线，
+        那点厚度就是靠这两条线和 3.2px 的间距读出来的。
+      */}
+      <div className="album-cover">
+        <div className="album-face album-face-front">
+          <svg className="album-doodles" viewBox="0 0 318 424" aria-hidden="true">
+            <g fill="currentColor">
+              <g transform="translate(30 46) scale(0.95) rotate(-12)">
+                <path d={HEART} />
+              </g>
+              <g transform="translate(252 76) scale(0.7) rotate(14)">
+                <path d={HEART} />
+              </g>
+              <g transform="translate(24 366) scale(0.62) rotate(8)">
+                <path d={HEART} />
+              </g>
+              <g transform="translate(258 350) scale(0.82) rotate(-10)">
+                <path d={HEART} />
+              </g>
+              <g transform="translate(140 68) scale(0.42) rotate(4)">
+                <path d={HEART} />
+              </g>
+            </g>
+            <g
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              opacity="0.66"
+            >
+              <path d="M62 396q16-11 32 0t32 0t32 0t32 0t32 0" />
+              <path d="M246 150v14M239 157h14" />
+              <path d="M70 258v11M64.5 263.5h11" />
+            </g>
+          </svg>
+
+          <span className="album-tape" aria-hidden="true" />
+
+          <div className="album-mark">
+            <svg className="album-heart" viewBox="0 0 24 24" aria-hidden="true">
+              <path d={HEART} fill="currentColor" />
+            </svg>
+            <h2>珍藏</h2>
+            <span className="album-count">
+              {count > 0 ? `${count} FRAMES` : 'EMPTY'}
+            </span>
+          </div>
+        </div>
+
+        <div className="album-face album-face-back" aria-hidden="true" />
       </div>
     </div>
   )

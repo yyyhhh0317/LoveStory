@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useRef } from 'react'
 import { useImgUrl } from '../hooks/useImgUrl'
 import type { Placed } from '../lib/layout'
 import type { Photo } from '../lib/types'
@@ -9,7 +9,7 @@ interface Props {
   animate: boolean
   /** 画布放大到一定程度时换成 2048 大图，否则 720 缩略图会被拉伸变糊 */
   hiRes: boolean
-  onOpen: (photo: Photo) => void
+  onOpen: (photo: Photo, rect: DOMRect | null) => void
   onDragGuard: () => boolean
 }
 
@@ -28,10 +28,13 @@ export const PhotoCard = memo(function PhotoCard({
 }: Props) {
   const { photo, x, y, w, h, tilt, delay } = placed
   const url = useImgUrl(photo.storageKey, hiRes ? 'full' : 'thumb')
+  const imgRef = useRef<HTMLImageElement>(null)
+  const boxRef = useRef<HTMLButtonElement>(null)
 
   return (
     <button
       type="button"
+      ref={boxRef}
       className={`photo-card${photo.featuredAt ? ' is-featured' : ''}${animate ? '' : ' no-anim'}`}
       style={{
         left: x,
@@ -43,13 +46,20 @@ export const PhotoCard = memo(function PhotoCard({
       }}
       onClick={() => {
         if (onDragGuard()) return
-        onOpen(photo)
+        /*
+         * 把缩略图此刻在屏幕上的位置交出去，详情页据此从这儿放大过去。
+         * 优先量 img：卡片本身带 6px 相纸边，用卡片的框会大一圈。
+         * 图还没加载出来时退回卡片框，飞起来也不至于从 0 尺寸开始。
+         */
+        const el = imgRef.current ?? boxRef.current
+        onOpen(photo, el?.getBoundingClientRect() ?? null)
       }}
       aria-label={photo.caption ?? '查看这张照片'}
     >
       <span className="photo-crop">
         {url ? (
           <img
+            ref={imgRef}
             src={url}
             alt={photo.caption ?? ''}
             draggable={false}

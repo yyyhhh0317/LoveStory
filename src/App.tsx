@@ -9,6 +9,7 @@ import { useAlbum } from './hooks/useAlbum'
 import { albumOrder, timelineOrder } from './lib/layout'
 import { formatDay } from './lib/format'
 import { findThrowback, todayKey } from './lib/throwback'
+import { toFrameRect, type FrameRect } from './lib/flight'
 import { isRemote } from './lib/repo'
 import type { NewPhotoInput, Photo } from './lib/types'
 
@@ -27,6 +28,8 @@ export default function App() {
   })
   const [uploadOpen, setUploadOpen] = useState(false)
   const [viewer, setViewer] = useState<{ mode: ViewMode; photoId: string } | null>(null)
+  /* 点开时那张缩略图在屏幕上的位置，交给沉浸视图做放大动画 */
+  const [origin, setOrigin] = useState<FrameRect | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const dayKey = useMemo(() => todayKey(), [])
   const [throwbackClosed, setThrowbackClosed] = useState(
@@ -64,19 +67,29 @@ export default function App() {
     if (viewer && sequence.length === 0) setViewer(null)
   }, [viewer, sequence.length])
 
-  const openPhoto = (photo: Photo) => setViewer({ mode: 'timeline', photoId: photo.id })
+  const openPhoto = (photo: Photo, rect: DOMRect | null = null) => {
+    setOrigin(toFrameRect(rect))
+    setViewer({ mode: 'timeline', photoId: photo.id })
+  }
 
-  const openAlbum = () => {
+  /*
+   * photoId 是内页上那张（相册第一张）。按 id 找而不是直接取 featured[0] ——
+   * 万一它在这半秒里被取消了星标，也不会从 A 飞到 B。
+   */
+  const openAlbum = (photoId: string | null = null, rect: DOMRect | null = null) => {
     if (!featured.length) {
       // 星标只在详情页右上角，画布上没有。提示得指对地方，否则人会去画布上找
       say('相册还空着 · 点开照片，右上角星标收进来')
       return
     }
-    setViewer({ mode: 'album', photoId: featured[0].id })
+    const start = featured.find((p) => p.id === photoId) ?? featured[0]
+    setOrigin(toFrameRect(rect))
+    setViewer({ mode: 'album', photoId: start.id })
   }
 
   const openThrowback = () => {
     if (!throwback) return
+    setOrigin(null)
     setViewer({ mode: 'throwback', photoId: throwback.photos[0].id })
   }
 
@@ -231,11 +244,15 @@ export default function App() {
             photos={sequence}
             index={index}
             onIndexChange={changeIndex}
-            onClose={() => setViewer(null)}
+            onClose={() => {
+              setViewer(null)
+              setOrigin(null)
+            }}
             onToggleFeatured={(p) => void toggleFeatured(p)}
             onSaveCaption={saveCaption}
             onDelete={(p) => void deletePhoto(p)}
             flip={viewer.mode === 'album'}
+            origin={origin}
             messageCount={album.counts[sequence[index]?.id ?? ''] ?? 0}
             onMessageCountChange={(delta) => {
               const id = sequence[index]?.id

@@ -78,7 +78,3 @@ export function timelineOrder(photos: Photo[]): Photo[] {
   )
 }
 
-export function albumCover(photos: Photo[]): Photo | null {
-  const list = albumOrder(photos)
-  return list.length ? list[list.length - 1] : null
-}

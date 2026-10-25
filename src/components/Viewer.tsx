@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useEffect, useRef, useState } from 'react'
 import { useImgUrl } from '../hooks/useImgUrl'
 import { formatDayCn } from '../lib/format'
 import type { Photo } from '../lib/types'
+import { FLIGHT_MS, prefersReducedMotion, type FrameRect } from '../lib/flight'
+import { FlightPhoto } from './FlightPhoto'
 import { MessageBoard } from './MessageBoard'
 import {
   ArrowLeftIcon,
@@ -24,6 +26,8 @@ interface Props {
   onMessageCountChange: (delta: number) => void
   /** 相册模式才翻书：新照片从侧面带着倾角翻进来，时间线浏览仍用原来的淡入 */
   flip?: boolean
+  /** 点开时那张缩略图在屏幕上的位置：有就从这里放大过来，没有就直接淡入 */
+  origin?: FrameRect | null
 }
 
 export function Viewer({
@@ -37,6 +41,7 @@ export function Viewer({
   messageCount,
   onMessageCountChange,
   flip = false,
+  origin = null,
 }: Props) {
   const photo = photos[index]
   const fullUrl = useImgUrl(photo?.storageKey ?? null, 'full')
@@ -48,6 +53,12 @@ export function Viewer({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [ambLum, setAmbLum] = useState<number | null>(null)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
+  const firstPhotoId = useRef(photo?.id)
+  /* 有起点就飞一次；第一次进来时先别让 img 自己淡入，会和飞行层叠在一起 */
+  const [flew] = useState(Boolean(origin) && !prefersReducedMotion())
+  const [flight, setFlight] = useState<{ from: FrameRect; to: FrameRect; src: string } | null>(null)
+  const [landed, setLanded] = useState(!flew)
   /*
    * 翻书方向。
    *
@@ -117,6 +128,42 @@ export function Viewer({
   }, [thumbUrl])
 
   /*
+   * 起飞：把终点交给飞行层。
+   *
+   * 终点不量真实的 img —— 大图可能还没解码完，量出来是 0 宽。
+   * 用 .viewer-frame 的框 + 照片宽高比按 contain 反推，和 CSS 那边
+   * （max-width/max-height + flex 居中）算出来是同一个矩形。
+   *
+   * 只在挂载时跑一次：飞行途中翻到下一张不该重新起飞。
+   */
+  useLayoutEffect(() => {
+    const el = frameRef.current
+    if (!flew || !origin || !el || !photo) return
+    const box = el.getBoundingClientRect()
+    const ar = photo.aspect > 0 ? photo.aspect : photo.width / photo.height || 4 / 3
+    let w = box.width
+    let h = w / ar
+    if (h > box.height) {
+      h = box.height
+      w = h * ar
+    }
+    const to: FrameRect = {
+      x: box.x + (box.width - w) / 2,
+      y: box.y + (box.height - h) / 2,
+      w,
+      h,
+    }
+    // 缩略图一定在缓存里（刚刚还在画布/内页上显示着），用它起飞不会空一帧
+    const src = thumbUrl ?? fullUrl
+    if (!src) {
+      setLanded(true)
+      return
+    }
+    setFlight({ from: origin, to, src })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /*
    * 把背景平均亮度拉到 0.32 附近：暗照片提亮、亮照片压暗。
    * 上限 1.55 是刻意的——再高，深色夜景会被抬得比照片本身还亮，
    * 照片就从「主体」变成了「一块暗补丁」。
@@ -178,8 +225,11 @@ export function Viewer({
 
   const pad = (n: number) => String(n).padStart(2, '0')
 
+  /* 从缩略图长出来的这一张，入场时不播 img-in：飞行层已经在演了 */
+  const isFirstShot = flew && photo.id === firstPhotoId.current
+
   return (
-    <div className="viewer">
+    <div className={`viewer${flew ? ' is-flight' : ''}`}>
       {/*
         氛围层：拿当前照片自己做底。缩到很小再放大，靠插值得到柔焦，
         比直接对全屏元素做大半径 blur 便宜得多（小尺寸只光栅一次）。
@@ -238,6 +288,7 @@ export function Viewer({
       <div className="viewer-body">
         <div className="viewer-main">
           <div
+            ref={frameRef}
             className="viewer-frame"
             onTouchStart={(e) => {
               const t = e.touches[0]
@@ -257,10 +308,14 @@ export function Viewer({
           >
             <img
               key={photo.id}
-              className={flip && turn !== 0 ? 'is-turn' : undefined}
-              style={
-                flip && turn !== 0 ? { ['--turn' as string]: String(turn) } : undefined
-              }
+              className={!isFirstShot && flip && turn !== 0 ? 'is-turn' : undefined}
+              style={{
+                ...(!isFirstShot && flip && turn !== 0
+                  ? { ['--turn' as string]: String(turn) }
+                  : {}),
+                // 飞行层落地的同一帧换成真图，两者位置像素级对齐，看不出接缝
+                ...(isFirstShot ? { animation: 'none', opacity: landed ? 1 : 0 } : {}),
+              }}
               src={fullUrl ?? thumbUrl ?? undefined}
               alt={photo.caption ?? ''}
               draggable={false}
@@ -343,6 +398,18 @@ export function Viewer({
         <MessageIcon size={15} />
         {messageCount > 0 ? `留言 ${messageCount}` : '写留言'}
       </button>
+
+      {flight && (
+        <FlightPhoto
+          from={flight.from}
+          to={flight.to}
+          src={flight.src}
+          onDone={() => {
+            setFlight(null)
+            setLanded(true)
+          }}
+        />
+      )}
     </div>
   )
 }

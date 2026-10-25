@@ -295,11 +295,13 @@ textarea {
 
 /* ---------- 中心相册 ---------- */
 /*
- * 立体感的构成（四层叠加，缺一层就会「贴纸化」）：
- *   1. 落影   —— 相册「放」在纸面上的投影，而不是贴在纸面上
- *   2. 书脊与页口 —— 侧面的厚度，交代体积
- *   3. 封面   —— 透视旋转，静止时也有极轻的偏角
- *   4. 内页   —— 悬停时轻微位移，和一、二层形成视差错觉
+ * 立体感靠四层叠出来，缺一层就会「贴纸化」：
+ *   1. 落影   —— 相册是「放」在纸面上的，不是贴上去的
+ *   2. 页块   —— 侧面错位叠出厚度，交代这是一叠纸
+ *   3. 封面   —— 两块纸板，正反两面在 Z 轴上分开 3.2px
+ *   4. 偏角   —— 静止时也有极轻的透视旋转
+ *
+ * 封面转过 90° 时不会凭空消失：它是两块纸板，侧面看到的是背板加两条 1px 边线。
  */
 .album {
   position: absolute;
@@ -316,7 +318,7 @@ textarea {
   animation: album-in 1s var(--ease) 0.05s both;
 }
 
-/* 登场：画布第一次铺开时，书是「放上来」的（这条关键帧之前一直缺失，引用是空转） */
+/* 登场：画布第一次铺开时，书是「放上来」的 */
 @keyframes album-in {
   from {
     opacity: 0;
@@ -367,47 +369,207 @@ textarea {
     12px 12px 0 -3px color-mix(in srgb, var(--bg-deep) 72%, transparent),
     18px 18px 0 -6px color-mix(in srgb, var(--bg-deep) 44%, transparent);
   transform: rotate(1.2deg);
+  transition: transform 0.36s var(--ease);
 }
 
+/* 封面下压着的那一页纸 */
+.album-page {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px 14px 14px 3px;
+  background: linear-gradient(168deg, #fffdfa 0%, #fbf3e9 58%, #f5e9db 100%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bg-deep) 60%, transparent),
+    inset 18px 0 26px -22px rgba(var(--book-shade), 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 26px;
+  overflow: hidden;
+}
+
+/*
+ * 内页照片：width/height 都是 auto，只受 max 约束 ——
+ * 这样元素的框就等于照片本身（不是装满木框再裁），
+ * 点开时按这个矩形起飞，终点才对得齐。
+ * 所以这里不能加 padding，也不能加 border。
+ */
+.album-page-photo {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 2px;
+  box-shadow: 0 10px 22px -12px rgba(var(--book-shade), 0.55);
+}
+
+.album-page-empty {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--book-ink);
+  opacity: 0.4;
+}
+
+/* 封面：只负责 3D，颜色和内容都在两张纸上 */
 .album-cover {
   position: absolute;
   inset: 0;
-  border-radius: 6px 16px 16px 6px;
-  background: linear-gradient(
-      158deg,
-      rgba(255, 255, 255, 0.3) 0%,
-      rgba(255, 255, 255, 0) 38%
-    ),
-    linear-gradient(
-      155deg,
-      color-mix(in srgb, var(--book) 76%, #fff) 0%,
-      var(--book) 36%,
-      var(--book-2) 100%
-    );
-  /* 一层贴边高光 + 两层内阴影（顶部受光、底部压暗）+ 三层外投影 */
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 1px 0 0 rgba(255, 255, 255, 0.16),
-    inset -7px 0 18px -12px rgba(var(--book-shade), 0.34),
-    inset -1.5px 0 0 rgba(var(--book-shade), 0.16),
-    inset 0 -3px 8px -4px rgba(var(--book-shade), 0.26), 0 2px 5px -1px rgba(var(--book-shade), 0.22),
-    0 16px 28px -12px rgba(var(--book-shade), 0.34), 0 44px 76px -34px rgba(var(--book-shade), 0.46);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  transform-origin: 50% 100%;
+  transform-style: preserve-3d;
+  transform-origin: 12% 50%;
   transform: rotateY(-2.4deg) rotateX(1.2deg);
-  transition: transform 0.62s var(--ease), box-shadow 0.62s var(--ease);
+  transition: transform 0.62s var(--ease);
   will-change: transform;
 }
 
-/* 悬停：封面绕底边后仰抬起，投影同步变大变淡 —— 典型的「离开纸面」线索 */
+.album-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px 16px 16px 6px;
+  border: 1px solid color-mix(in srgb, var(--book-ink) 20%, transparent);
+  backface-visibility: hidden;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 正面：奶油/莓奶的纸板，加一层左上受光 */
+.album-face-front {
+  transform: translateZ(1.6px);
+  background: linear-gradient(
+      158deg,
+      rgba(255, 255, 255, 0.34) 0%,
+      rgba(255, 255, 255, 0) 42%
+    ),
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--book) 72%, #fff) 0%,
+      var(--book) 40%,
+      var(--book-2) 100%
+    );
+  box-shadow: inset -8px 0 20px -14px rgba(var(--book-shade), 0.35),
+    inset 0 -3px 10px -6px rgba(var(--book-shade), 0.3),
+    0 2px 6px -1px rgba(var(--book-shade), 0.22),
+    0 18px 34px -16px rgba(var(--book-shade), 0.42);
+}
+
+/* 背面：封面的内衬，颜色更深一点，转过去才看得出是「另一面」 */
+.album-face-back {
+  transform: rotateY(180deg) translateZ(1.6px);
+  background: linear-gradient(
+    200deg,
+    color-mix(in srgb, var(--book-2) 86%, #fff) 0%,
+    color-mix(in srgb, var(--book) 90%, #000) 100%
+  );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    inset 0 0 44px -20px rgba(var(--book-shade), 0.55);
+}
+
+/* 封面的内衬：一圈细边 + 中心一层极淡的光，背面才不像一块空白板 */
+.album-face-back::after {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border-radius: 4px 12px 12px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: radial-gradient(
+    58% 46% at 50% 46%,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0) 72%
+  );
+  pointer-events: none;
+}
+
+/* 涂鸦层 */
+.album-doodles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: color-mix(in srgb, var(--book-ink) 74%, transparent);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* 封面正面那圈虚线，像手缝的走线 */
+.album-face-front::before {
+  content: '';
+  position: absolute;
+  inset: 15px;
+  border-radius: 4px 12px 12px 4px;
+  border: 1.5px dashed color-mix(in srgb, var(--book-ink) 34%, transparent);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+/* 顶部一小条和纸胶带 */
+.album-tape {
+  position: absolute;
+  top: 21px;
+  left: 50%;
+  width: 84px;
+  height: 20px;
+  margin-left: -42px;
+  border-radius: 1px;
+  transform: rotate(-2.6deg);
+  background: repeating-linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.42) 0 7px,
+    rgba(255, 255, 255, 0.12) 7px 14px
+  );
+  box-shadow: 0 2px 6px -3px rgba(var(--book-shade), 0.45);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* 中央：一颗爱心 + 书名 */
+.album-mark {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.album-heart {
+  width: 52px;
+  height: 52px;
+  color: var(--accent);
+  transform: rotate(-4deg);
+  filter: drop-shadow(0 7px 11px rgba(var(--book-shade), 0.3));
+  margin-bottom: 6px;
+}
+
+.album-heart path {
+  stroke: rgba(255, 255, 255, 0.75);
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+}
+
+.album-mark h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: 0.24em;
+  text-indent: 0.24em;
+  color: var(--book-ink);
+}
+
+.album-count {
+  font-size: 9.5px;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em;
+  color: var(--book-ink);
+  opacity: 0.5;
+}
+
+/* 悬停：封面绕书脊抬起，落影同步放大变淡 */
 .album:hover .album-cover {
-  transform: translateY(-16px) translateZ(38px) rotateY(-10deg) rotateX(6.5deg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62),
-    inset 1px 0 0 rgba(255, 255, 255, 0.22),
-    inset -7px 0 18px -11px rgba(var(--book-shade), 0.28),
-    inset 0 -3px 8px -4px rgba(var(--book-shade), 0.22), 0 3px 8px -2px rgba(var(--book-shade), 0.2),
-    0 28px 44px -14px rgba(var(--book-shade), 0.28), 0 66px 104px -42px rgba(var(--book-shade), 0.4);
+  transform: translateY(-16px) translateZ(38px) rotateY(-12deg) rotateX(6deg);
 }
 
 .album:hover::before {
@@ -415,59 +577,31 @@ textarea {
   opacity: 0.72;
 }
 
-/* 触摸/点击时的下压反馈 */
+/* 按下 */
 .album:active .album-cover {
-  transform: translateY(-5px) translateZ(12px) rotateY(-5deg) rotateX(3deg);
+  transform: translateY(-5px) translateZ(12px) rotateY(-6deg) rotateX(3deg);
 }
 
-/* ---------- 掀开封面 ---------- */
 /*
- * 点开相册时把封面真的转开，而不是直接跳进沉浸视图。
- * 旋转原点挪到书脊（左侧），转过去 104° 刚好越过边缘那一刻，
- * backface-visibility: hidden 让它消失 —— 不做背面镜像，镜像出来的照片很脏。
- * 内页同时轻轻前倾，形成「封面被掀起、纸页露出来」的层次差。
+ * 掀开：转 100°，越过 90° 之后看到的是背板。
+ * 页块同时摆正（去掉那 1.2° 的歪斜）—— 一是好看，二是量出来的矩形
+ * 不带旋转包围盒的误差，飞行起点才准。
  */
 .album.is-opening .album-cover {
-  transform-origin: 12% 50%;
-  transform: translateZ(30px) rotateY(-100deg);
-  backface-visibility: hidden;
-  transition: transform 0.5s cubic-bezier(0.4, 0.62, 0.24, 1), box-shadow 0.5s var(--ease);
+  transform: translateY(-6px) translateZ(26px) rotateY(-100deg) rotateX(0deg);
+  transition: transform 0.36s cubic-bezier(0.42, 0.62, 0.24, 1);
 }
 
 .album.is-opening .album-pages {
-  transform: rotate(1.2deg) translateY(-5px) scale(1.012);
-  transition: transform 0.5s var(--ease);
+  transform: translateY(-5px);
 }
 
-/*
- * 封面转开之后露出来的那一下，不该是页口那道细条纹（那是从侧面看才成立的细节），
- * 而应该是一张干净的纸。所以叠一层纸面上去，封面转过 90° 左右时正好淡入。
- */
-.album.is-opening .album-pages::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 3px 14px 14px 3px;
-  background: linear-gradient(
-    96deg,
-    color-mix(in srgb, var(--surface) 84%, var(--bg-deep)) 0%,
-    var(--surface) 24%,
-    color-mix(in srgb, var(--surface) 96%, var(--bg-deep)) 72%,
-    color-mix(in srgb, var(--surface) 86%, var(--bg-deep)) 100%
-  );
-  box-shadow: inset 18px 0 26px -20px rgba(var(--book-shade), 0.45),
-    inset 0 0 0 1px color-mix(in srgb, var(--bg-deep) 55%, transparent);
-  opacity: 0;
-  animation: page-reveal 0.32s var(--ease) 0.1s forwards;
+.album.is-opening::before {
+  transform: translateZ(-2px) scale(1.06) translateY(4px);
+  opacity: 0.6;
 }
 
-@keyframes page-reveal {
-  to {
-    opacity: 1;
-  }
-}
-
-/* 掀开时有一道光扫过纸页 */
+/* 掀开时一道光扫过纸页 */
 .album.is-opening::after {
   content: '';
   position: absolute;
@@ -476,12 +610,12 @@ textarea {
   background: linear-gradient(
     102deg,
     transparent 36%,
-    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.55) 50%,
     transparent 64%
   );
   opacity: 0;
   pointer-events: none;
-  animation: page-sweep 0.52s var(--ease) 0.05s forwards;
+  animation: page-sweep 0.5s var(--ease) 0.04s forwards;
 }
 
 @keyframes page-sweep {
@@ -498,89 +632,21 @@ textarea {
   }
 }
 
-/* 书脊 */
-.album-cover::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 18px;
-  background: linear-gradient(
-    90deg,
-    rgba(var(--book-shade), 0.24) 0%,
-    rgba(var(--book-shade), 0.07) 52%,
-    rgba(255, 255, 255, 0.2) 74%,
-    rgba(255, 255, 255, 0) 100%
-  );
-}
-
-.album-cover::after {
-  content: '';
-  position: absolute;
-  inset: 12px 12px 12px 26px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 4px;
+/* ---------- 从缩略图飞向详情页的那张图 ---------- */
+/*
+ * 飞行层。position: fixed 让它脱离画布的缩放，
+ * 只在 transform 上做动画（合成层），不碰布局。
+ */
+.photo-fly {
+  position: fixed;
+  z-index: 6;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 44px 84px -30px rgba(0, 0, 0, 0.8),
+    0 8px 20px -10px rgba(0, 0, 0, 0.45);
   pointer-events: none;
-}
-
-.album-label {
-  position: relative;
-  z-index: 2;
-  margin: 26px 24px 0 30px;
-  padding-bottom: 12px;
-  color: var(--book-ink);
-}
-
-.album-label h2 {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: 18px;
-  font-weight: 400;
-  letter-spacing: 0.18em;
-}
-
-.album-label span {
-  display: block;
-  margin-top: 5px;
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  opacity: 0.55;
-}
-
-.album-photo {
-  position: relative;
-  z-index: 2;
-  margin: 20px 24px 0 30px;
-  flex: 1;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.34);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3),
-    0 10px 20px -14px rgba(var(--book-shade), 0.45);
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.album-photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform 0.75s var(--ease);
-}
-
-.album:hover .album-photo img {
-  transform: scale(1.045) translateY(-3px);
-}
-
-.album-photo .placeholder {
-  font-family: var(--font-serif);
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  color: var(--book-ink);
-  opacity: 0.45;
+  will-change: transform;
 }
 
 /* ============================================================
@@ -1030,6 +1096,18 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.viewer.is-flight {
+  /*
+   * 飞行时背景**不做淡入**，直接到位。
+   *
+   * 试过 0.5s → 0.34s+0.14s → 0.18s，都不行：只要背景是半透明的，
+   * 这期间画布上的顶栏（yyyhhh、放照片）就会和详情页自己的标题、按钮叠在一起，
+   * 两层字，整屏发灰。真正接住视线的是那张正在放大的照片 ——
+   * 它从内页原地起飞、一帧都没断，所以背景硬切并不突兀，反而干净。
+   */
+  animation: none;
 }
 
 .viewer-frame img {

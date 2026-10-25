@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Photo } from '../lib/types'
-import { albumCover, layoutTimeline } from '../lib/layout'
+import { albumOrder, layoutTimeline } from '../lib/layout'
 import { PhotoCard } from './PhotoCard'
 import { AlbumBook } from './AlbumBook'
 import { PlusIcon, TargetIcon } from './icons'
@@ -24,8 +24,8 @@ interface Props {
   photos: Photo[]
   counts: Record<string, number>
   localOnly: boolean
-  onOpenPhoto: (photo: Photo) => void
-  onOpenAlbum: () => void
+  onOpenPhoto: (photo: Photo, rect: DOMRect | null) => void
+  onOpenAlbum: (photoId: string | null, rect: DOMRect | null) => void
   onRequestUpload: () => void
 }
 
@@ -163,7 +163,11 @@ export function CanvasWall({
     for (const p of placed) list.push({ x: p.x, y: p.y, hw: p.w / 2, hh: p.h / 2 })
     return list
   }, [placed])
-  const cover = useMemo(() => albumCover(photos), [photos])
+  /*
+   * 封面本身不放照片了，翻开后露出来的那一页放相册的**第一张** ——
+   * 也正好是点开相册后看到的那一张，翻过去不会左右不是同一张。
+   */
+  const firstPage = useMemo(() => albumOrder(photos)[0] ?? null, [photos])
   const featuredCount = useMemo(() => photos.filter((p) => p.featuredAt).length, [photos])
 
   sizeRef.current = size
@@ -361,7 +365,7 @@ export function CanvasWall({
             }
           }}
         >
-          <AlbumBook cover={cover} count={featuredCount} onOpen={onOpenAlbum} />
+          <AlbumBook page={firstPage} count={featuredCount} onOpen={onOpenAlbum} />
         </div>
 
         {visible.map((p) => (

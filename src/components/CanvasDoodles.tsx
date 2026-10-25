@@ -3,16 +3,17 @@ import { useMemo } from 'react'
 /*
  * 画布背景涂鸦（多巴胺手绘风）。
  *
- * 决策记录（2026-10-25 拷问会议）：
+ * 决策记录（2026-10-25 拷问会议 + 后续调整）：
  *   - 只放画布背景、跟 world 平移、全部静态、零运行时动效
  *   - 固定 seed 伪随机撒点：网格制，每个位置永远长同一株涂鸦，
- *     拖到哪都有；相册周围 350 单位内不长，不抢封面
- *   - 元素 13 变体：爱心×3 气球×3 波浪×2 彩虹×2 + 星星/雏菊/糖豆调剂
- *   - 质感 5 种：马克笔 / 果冻贴纸 / 蜡笔颗粒(feTurbulence，静态只光栅一次) /
- *     虚线绣线 / 闪粉点阵；彩色描边下都垫一道白，压到照片边上也读得清
+ *     拖到哪都有；相册周围按涂鸦尺寸留净空，不抢封面
+ *   - 元素 13 变体：爱心×3 气球×3 波浪×2（均实线）彩虹×2 + 星星/雏菊/糖豆调剂
+ *   - 质感 3 种：马克笔 / 果冻贴纸 / 闪粉点阵；彩色描边下都垫一道白，
+ *     压到照片边上也读得清（蜡笔颗粒、虚线绣线已按用户要求移除）
  *   - 颜色：cream/blush 各自的主题衍生 6 色糖果盘（--doodle-1..6），
  *     不透明度 0.55–0.7，热闹但不刺眼
- *   - 密度：初始视野约 4–6 个；同屏不重复靠「变体 = 网格坐标的线性组合」——
+ *   - 尺寸：186–294 世界单位（2026-10-25 要求放大三倍后的量级）
+ *   - 密度：同屏不重复靠「变体 = 网格坐标的线性组合」——
  *     相邻格变体必然错开，走远了才可能重样
  */
 
@@ -25,8 +26,8 @@ interface View {
 /** 网格尺寸（世界单位）：初始视野约 4–6 株 */
 const CELL_W = 760
 const CELL_H = 620
-/** 相册在原点，这一圈不让涂鸦长进来 */
-const ALBUM_CLEAR = 350
+/** 相册在原点，这一圈不让涂鸦长进来（会再叠加涂鸦自身半径） */
+const ALBUM_CLEAR = 420
 /** 变体总数 */
 const VARIANT_N = 13
 const COLOR_N = 6
@@ -79,9 +80,9 @@ function Shape({ v, c }: ShapeProps) {
           />
         </g>
       )
-    case 2: // 蜡笔双线爱心
+    case 2: // 双线爱心（马克笔细描）
       return (
-        <g fill="none" stroke={col(c)} strokeLinecap="round" filter="url(#doodle-crayon)">
+        <g fill="none" stroke={col(c)} strokeLinecap="round" strokeLinejoin="round">
           <path d={HEART_D} strokeWidth={3.6} />
           <path d={HEART_D} strokeWidth={2.6} transform="translate(50 57) scale(0.72) translate(-50 -57)" />
         </g>
@@ -172,16 +173,17 @@ function Shape({ v, c }: ShapeProps) {
           ))}
         </g>
       )
-    case 7: // 回勾波浪（绣线点阵）
+    case 7: // 回勾波浪（马克笔实线）
       return (
-        <path
-          d="M12 56 q 10 -15 20 0 t 20 0 t 20 0 q 9 0 7 -9 q -2 -9 -11 -5"
-          fill="none"
-          stroke={col(c)}
-          strokeWidth={5.5}
-          strokeLinecap="round"
-          strokeDasharray="0.1 10"
-        />
+        <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <path
+            d="M12 56 q 10 -15 20 0 t 20 0 t 20 0 q 9 0 7 -9 q -2 -9 -11 -5"
+            stroke="#fffdf6"
+            strokeWidth={11}
+            opacity={0.9}
+          />
+          <path d="M12 56 q 10 -15 20 0 t 20 0 t 20 0 q 9 0 7 -9 q -2 -9 -11 -5" stroke={col(c)} strokeWidth={5.5} />
+        </g>
       )
 
     /* ---------- 彩虹 ×2 ---------- */
@@ -240,9 +242,9 @@ function Shape({ v, c }: ShapeProps) {
           <circle cx={84} cy={72} r={2.4} fill={col(c + 1)} />
         </g>
       )
-    case 11: // 小雏菊（蜡笔）
+    case 11: // 小雏菊
       return (
-        <g filter="url(#doodle-crayon)">
+        <g>
           {[0, 60, 120, 180, 240, 300].map((a) => (
             <ellipse
               key={a}
@@ -323,9 +325,11 @@ function computeDoodles(view: View, size: { w: number; h: number }): Doodle[] {
       const count = r < 0.25 ? 0 : r < 0.75 ? 1 : 2
       for (let k = 0; k < count; k++) {
         const h = hash2(ix, iy, 17 + k * 131)
+        const size = 186 + rand01(h >>> 11) * 108
         const x = ix * CELL_W + CELL_W * (0.18 + rand01(h >>> 3) * 0.64)
         const y = iy * CELL_H + CELL_H * (0.18 + rand01(h >>> 7) * 0.64)
-        if (Math.hypot(x, y) < ALBUM_CLEAR) continue
+        /* 净空要算上涂鸦自身半径，不然大涂鸦会怼到封面上 */
+        if (Math.hypot(x, y) < ALBUM_CLEAR + size / 2) continue
 
         /* 相邻格变体必然错开：变体是网格坐标的线性组合 */
         const base = (((ix * 3 + iy * 5) % VARIANT_N) + VARIANT_N) % VARIANT_N
@@ -336,10 +340,10 @@ function computeDoodles(view: View, size: { w: number; h: number }): Doodle[] {
         let fy = y
         if (k === 1 && out.length > 0) {
           const prev = out[out.length - 1]
-          if (Math.hypot(prev.x - x, prev.y - y) < 150) {
-            fx = x + 170
-            fy = y + 120
-            if (Math.hypot(fx, fy) < ALBUM_CLEAR) continue
+          if (Math.hypot(prev.x - x, prev.y - y) < 430) {
+            fx = x + 480
+            fy = y + 340
+            if (Math.hypot(fx, fy) < ALBUM_CLEAR + size / 2) continue
           }
         }
 
@@ -347,7 +351,7 @@ function computeDoodles(view: View, size: { w: number; h: number }): Doodle[] {
           key: `${ix}_${iy}_${k}`,
           x: fx,
           y: fy,
-          size: 62 + rand01(h >>> 11) * 36,
+          size,
           variant,
           color: (h >>> 8) % COLOR_N,
           rot: (rand01(h >>> 5) - 0.5) * 26,
@@ -369,15 +373,6 @@ export function CanvasDoodles({ view, size }: { view: View; size: { w: number; h
 
   return (
     <div className="doodles" aria-hidden="true">
-      {/* 蜡笔质感共用一枚粗糙边缘滤镜，静态图形只光栅一次 */}
-      <svg width={0} height={0} style={{ position: 'absolute' }}>
-        <defs>
-          <filter id="doodle-crayon" x="-20%" y="-20%" width="140%" height="140%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.12" numOctaves="2" result="n" />
-            <feDisplacementMap in="SourceGraphic" in2="n" scale="3.4" />
-          </filter>
-        </defs>
-      </svg>
       {doodles.map((d) => (
         <div
           key={d.key}

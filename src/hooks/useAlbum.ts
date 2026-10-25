@@ -110,27 +110,73 @@ export function useAlbum() {
     return { created, failed }
   }, [])
 
+  /*
+   * 下面三个写操作都是「先改界面、再发请求」，但**失败必须回滚并抛出去**。
+   *
+   * 之所以敢用乐观更新：这两个人点星标、改简介、删照片的手感全在这里，
+   * 等一个来回网络请求再变界面会明显发木。
+   * 之所以必须回滚：不回滚的话界面显示成功、数据库没改，刷新之后才发现，
+   * 那是最糟的一种——你不知道哪一次操作是真的生效了。
+   *
+   * 回滚都带条件：只有当值还是「这次写进去的那个」才回滚，
+   * 避免把用户紧接着的第二次修改一起抹掉。
+   */
+
   const setCaption = useCallback(async (id: string, caption: string | null) => {
     const trimmed = caption && caption.trim() ? caption.trim() : null
-    setPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, caption: trimmed } : p)))
-    await repo.patchPhoto(id, { caption: trimmed })
+    const prev = photosRef.current.find((p) => p.id === id)?.caption ?? null
+    setPhotos((cur) => cur.map((p) => (p.id === id ? { ...p, caption: trimmed } : p)))
+    try {
+      await repo.patchPhoto(id, { caption: trimmed })
+    } catch (err) {
+      setPhotos((cur) =>
+        cur.map((p) => (p.id === id && p.caption === trimmed ? { ...p, caption: prev } : p))
+      )
+      throw err
+    }
   }, [])
 
   const toggleFeatured = useCallback(async (id: string) => {
-    let next: string | null = null
-    setPhotos((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p
-        next = p.featuredAt ? null : new Date().toISOString()
-        return { ...p, featuredAt: next }
-      })
-    )
-    await repo.patchPhoto(id, { featuredAt: next })
+    const current = photosRef.current.find((p) => p.id === id)
+    if (!current) return
+
+    /*
+     * 这里原本是在 setPhotos 的回调里算 next、算完立刻读出来发请求。
+     * 它现在能跑，是因为 React 对空队列的 setState 会「急切求值」顺手把
+     * 回调执行了一次；换个时机（并发、批量、连点两下）就轮不到那次执行，
+     * next 会一直停在初始值 null，于是「点上星标」被写成「取消星标」。
+     * 改成从 ref 里读当前值、先算好再更新，不依赖任何执行时机的巧合。
+     */
+    const next = current.featuredAt ? null : new Date().toISOString()
+    setPhotos((cur) => cur.map((p) => (p.id === id ? { ...p, featuredAt: next } : p)))
+    try {
+      await repo.patchPhoto(id, { featuredAt: next })
+    } catch (err) {
+      setPhotos((cur) =>
+        cur.map((p) =>
+          p.id === id && p.featuredAt === next ? { ...p, featuredAt: current.featuredAt } : p
+        )
+      )
+      throw err
+    }
   }, [])
 
   const removePhoto = useCallback(async (id: string) => {
-    setPhotos((prev) => prev.filter((p) => p.id !== id))
-    await repo.softDeletePhoto(id)
+    const before = photosRef.current
+    const at = before.findIndex((p) => p.id === id)
+    if (at < 0) return
+    setPhotos((cur) => cur.filter((p) => p.id !== id))
+    try {
+      await repo.softDeletePhoto(id)
+    } catch (err) {
+      // 放回原来的位置，而不是追加到末尾
+      setPhotos((cur) =>
+        cur.some((p) => p.id === id)
+          ? cur
+          : [...cur.slice(0, at), before[at], ...cur.slice(at)]
+      )
+      throw err
+    }
   }, [])
 
   const bumpMessageCount = useCallback((photoId: string, delta: number) => {

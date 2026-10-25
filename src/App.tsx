@@ -34,10 +34,11 @@ export default function App() {
     if (meta) meta.setAttribute('content', theme === 'blush' ? '#FDF1F2' : '#FBF5EE')
   }, [theme])
 
-  const say = (text: string) => {
+  /** 失败提示比成功提示多留一会儿，因为要看清的是「需要再做什么」 */
+  const say = (text: string, ms = 2600) => {
     setToast(text)
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(null), 2600)
+    toastTimer.current = window.setTimeout(() => setToast(null), ms)
   }
 
   const timeline = useMemo(() => timelineOrder(album.photos), [album.photos])
@@ -67,14 +68,26 @@ export default function App() {
 
   const toggleFeatured = async (photo: Photo) => {
     const wasFeatured = Boolean(photo.featuredAt)
-    await album.toggleFeatured(photo.id)
-    say(wasFeatured ? '已从相册里移出' : '已收进中心相册')
+    try {
+      await album.toggleFeatured(photo.id)
+      say(wasFeatured ? '已从相册里移出' : '已收进中心相册')
+    } catch {
+      // 界面已经回滚了，这里只需要说清「没成」
+      say('星标没存上，再点一次试试', 3800)
+    }
   }
 
   const deletePhoto = async (photo: Photo) => {
     const at = sequence.findIndex((p) => p.id === photo.id)
     const neighbour = sequence[at + 1] ?? sequence[at - 1] ?? null
-    await album.removePhoto(photo.id)
+    try {
+      await album.removePhoto(photo.id)
+    } catch {
+      // 照片已经被 useAlbum 放回原位了，页面别动，只报告
+      say('没删掉，那张还在画布上', 3800)
+      return
+    }
+    // 只有真的删成功才切下一张，否则会一边报错一边把人带到别的照片去
     if (viewer) {
       if (neighbour) setViewer({ ...viewer, photoId: neighbour.id })
       else setViewer(null)
@@ -83,6 +96,16 @@ export default function App() {
   }
 
   const handleUpload = (items: NewPhotoInput[]) => album.addPhotos(items)
+
+  const saveCaption = async (photo: Photo, caption: string | null) => {
+    try {
+      await album.setCaption(photo.id, caption)
+      return true
+    } catch {
+      say('简介没存上，字还在，再点一次保存', 3800)
+      return false
+    }
+  }
 
   const subtitle = useMemo(() => {
     if (album.phase === 'loading') return '正在翻开…'
@@ -186,7 +209,7 @@ export default function App() {
             onIndexChange={changeIndex}
             onClose={() => setViewer(null)}
             onToggleFeatured={(p) => void toggleFeatured(p)}
-            onSaveCaption={(p, caption) => void album.setCaption(p.id, caption)}
+            onSaveCaption={saveCaption}
             onDelete={(p) => void deletePhoto(p)}
             messageCount={album.counts[sequence[index]?.id ?? ''] ?? 0}
             onMessageCountChange={(delta) => {

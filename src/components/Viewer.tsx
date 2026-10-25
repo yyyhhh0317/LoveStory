@@ -18,7 +18,7 @@ interface Props {
   onIndexChange: (index: number) => void
   onClose: () => void
   onToggleFeatured: (photo: Photo) => void
-  onSaveCaption: (photo: Photo, caption: string | null) => void
+  onSaveCaption: (photo: Photo, caption: string | null) => Promise<boolean>
   onDelete: (photo: Photo) => void
   messageCount: number
   onMessageCountChange: (delta: number) => void
@@ -128,9 +128,26 @@ export function Viewer({
     setEditing(true)
   }
 
-  const commit = () => {
-    onSaveCaption(photo, draft.trim() ? draft.trim() : null)
-    setEditing(false)
+  /**
+   * 保存简介。
+   * 失败时**不退出编辑态**：草稿留在输入框里，用户再点一次保存就行，
+   * 不用重新把那段话打一遍。成功才收起。
+   *
+   * savingRef 防的是「点保存」这两条路径叠加：textarea 失焦会先触发 onBlur，
+   * 紧接着按钮的 click 又会调一次，同一个值会被提交两遍。
+   */
+  const savingRef = useRef(false)
+  const commit = async () => {
+    if (savingRef.current) return
+    const next = draft.trim() ? draft.trim() : null
+    if (next === (photo.caption ?? null)) {
+      setEditing(false)
+      return
+    }
+    savingRef.current = true
+    const ok = await onSaveCaption(photo, next)
+    savingRef.current = false
+    if (ok) setEditing(false)
   }
 
   const go = (delta: number) => {
@@ -254,17 +271,17 @@ export function Viewer({
                   maxLength={160}
                   placeholder="两句话就够，写下这一刻…"
                   onChange={(e) => setDraft(e.target.value)}
-                  onBlur={commit}
+                  onBlur={() => void commit()}
                   onKeyDown={(e) => {
                     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                       e.preventDefault()
-                      commit()
+                      void commit()
                     }
                   }}
                 />
                 <div className="caption-hint">
                   <span>{draft.length} / 160 · 可选</span>
-                  <button type="button" onClick={commit}>
+                  <button type="button" onClick={() => void commit()}>
                     保存
                   </button>
                 </div>

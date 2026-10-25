@@ -5,11 +5,11 @@ import { hashString } from './format'
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 
 /** 时间线螺旋的起始半径：贴着中心相册外缘开始，保证一进来就能看到照片 */
-const START_RADIUS = 382
+const START_RADIUS = 400
 /** 螺旋松紧：决定了相邻照片之间的平均间距 */
-const SPREAD = 150
+const SPREAD = 185
 /** 单张照片在画布上的最长边（画布单位） */
-const MAX_EDGE = 218
+const MAX_EDGE = 250
 /** 相纸白边的总宽度 */
 const FRAME = 12
 
@@ -50,7 +50,7 @@ export function layoutTimeline(photos: Photo[]): Placed[] {
     }
 
     const h = hashString(photo.id)
-    const tilt = ((h % 1000) / 1000 - 0.5) * 4.4
+    const tilt = ((h % 1000) / 1000 - 0.5) * 3.2
 
     return {
       photo,

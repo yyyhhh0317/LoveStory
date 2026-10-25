@@ -8,6 +8,11 @@ import { PlusIcon, TargetIcon } from './icons'
 const MIN_SCALE = 0.16
 const MAX_SCALE = 2.4
 const DRAG_TOLERANCE = 6
+/** 视口外多渲染一圈的余量（世界单位），越小越省，但快速平移时更容易看到空档 */
+const VIEW_PADDING = 220
+/** 放大到这个倍率换高清图，缩回要跌破 RETINA_OFF 才降级，避免在阈值上反复横跳 */
+const RETINA_ON = 1.0
+const RETINA_OFF = 0.82
 
 interface View {
   x: number
@@ -32,6 +37,8 @@ function zoomAt(view: View, mx: number, my: number, factor: number): View {
   return { x: mx - (mx - view.x) * k, y: my - (my - view.y) * k, scale }
 }
 
+const initialScale = () => (window.innerWidth < 720 ? 0.42 : 0.62)
+
 export function CanvasWall({
   photos,
   counts,
@@ -45,12 +52,18 @@ export function CanvasWall({
   const [view, setView] = useState<View>(() => ({
     x: window.innerWidth / 2,
     y: window.innerHeight / 2,
-    scale: window.innerWidth < 720 ? 0.46 : 0.66,
+    scale: initialScale(),
   }))
   const [animating, setAnimating] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [hinted, setHinted] = useState(false)
   const [settled, setSettled] = useState(false)
+  const [hiRes, setHiRes] = useState(false)
+
+  /* 权威视图：每次输入立即更新，React 状态每帧最多同步一次 */
+  const liveView = useRef<View>(view)
+  const rafRef = useRef<number | null>(null)
+  const pendingView = useRef<View | null>(null)
 
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const panStart = useRef<{ px: number; py: number; vx: number; vy: number } | null>(null)
@@ -64,6 +77,25 @@ export function CanvasWall({
   } | null>(null)
   const dragMoved = useRef(0)
   const capturedIds = useRef(new Set<number>())
+
+  const applyView = useCallback((next: View) => {
+    liveView.current = next
+    pendingView.current = next
+    if (rafRef.current !== null) return
+    rafRef.current = window.requestAnimationFrame(() => {
+      rafRef.current = null
+      const v = pendingView.current
+      pendingView.current = null
+      if (v) setView(v)
+    })
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current)
+    },
+    []
+  )
 
   const placed = useMemo(() => layoutTimeline(photos), [photos])
   const cover = useMemo(() => albumCover(photos), [photos])
@@ -79,6 +111,12 @@ export function CanvasWall({
     return () => ro.disconnect()
   }, [])
 
+  /* 放大时换高清图 —— 这是「照片不清楚」的解 */
+  useEffect(() => {
+    if (!hiRes && view.scale >= RETINA_ON) setHiRes(true)
+    else if (hiRes && view.scale <= RETINA_OFF) setHiRes(false)
+  }, [view.scale, hiRes])
+
   useEffect(() => {
     const el = shellRef.current
     if (!el) return
@@ -88,26 +126,31 @@ export function CanvasWall({
       const rect = el.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
-      setView((v) => zoomAt(v, mx, my, Math.exp(-e.deltaY * 0.0016)))
+      applyView(zoomAt(liveView.current, mx, my, Math.exp(-e.deltaY * 0.0016)))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [])
+  }, [applyView])
 
   const handlePointerDown = (e: React.PointerEvent) => {
     const el = shellRef.current
     if (!el) return
     setSettled(true)
     /*
-     * 这里故意不 capture。setPointerCapture 会把后续的 pointerup / click
-     * 都重定向到画布容器上，卡片自己的 onClick 就再也收不到事件了。
+     * 这里故意不 capture：setPointerCapture 会把后续的 pointerup / click
+     * 都重定向到画布容器，卡片自己的 onClick 就再也收不到事件了。
      * 捕获推迟到「判定为拖动」之后再做。
      */
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     dragMoved.current = 0
 
     if (pointers.current.size === 1) {
-      panStart.current = { px: e.clientX, py: e.clientY, vx: view.x, vy: view.y }
+      panStart.current = {
+        px: e.clientX,
+        py: e.clientY,
+        vx: liveView.current.x,
+        vy: liveView.current.y,
+      }
       setDragging(true)
     } else if (pointers.current.size === 2) {
       // 双指只可能是捏合缩放，不会产生点击，可以立刻捕获
@@ -122,11 +165,11 @@ export function CanvasWall({
       const [a, b] = [...pointers.current.values()]
       pinchStart.current = {
         dist: Math.hypot(a.x - b.x, a.y - b.y),
-        scale: view.scale,
+        scale: liveView.current.scale,
         cx: (a.x + b.x) / 2,
         cy: (a.y + b.y) / 2,
-        vx: view.x,
-        vy: view.y,
+        vx: liveView.current.x,
+        vy: liveView.current.y,
       }
       panStart.current = null
     }
@@ -144,7 +187,7 @@ export function CanvasWall({
       const worldX = (ps.cx - ps.vx) / ps.scale
       const worldY = (ps.cy - ps.vy) / ps.scale
       dragMoved.current = 999
-      setView({
+      applyView({
         x: ps.cx - worldX * nextScale,
         y: ps.cy - worldY * nextScale,
         scale: nextScale,
@@ -153,8 +196,9 @@ export function CanvasWall({
     }
 
     if (pointers.current.size === 1 && panStart.current) {
-      const dx = e.clientX - panStart.current.px
-      const dy = e.clientY - panStart.current.py
+      const ps = panStart.current
+      const dx = e.clientX - ps.px
+      const dy = e.clientY - ps.py
       dragMoved.current = Math.max(dragMoved.current, Math.hypot(dx, dy))
 
       // 越过容差才认定是拖动，此时才捕获指针，保证拖出窗口也不丢事件
@@ -167,7 +211,7 @@ export function CanvasWall({
         }
       }
 
-      setView((v) => ({ ...v, x: panStart.current!.vx + dx, y: panStart.current!.vy + dy }))
+      applyView({ x: ps.vx + dx, y: ps.vy + dy, scale: liveView.current.scale })
     }
   }
 
@@ -181,26 +225,30 @@ export function CanvasWall({
     } else if (pointers.current.size === 1) {
       pinchStart.current = null
       const [only] = [...pointers.current.values()]
-      panStart.current = { px: only.x, py: only.y, vx: view.x, vy: view.y }
+      panStart.current = {
+        px: only.x,
+        py: only.y,
+        vx: liveView.current.x,
+        vy: liveView.current.y,
+      }
     }
   }
 
   const recenter = useCallback(() => {
     setAnimating(true)
-    setView({
+    applyView({
       x: size.w / 2,
       y: size.h / 2,
-      scale: size.w < 720 ? 0.46 : 0.66,
+      scale: size.w < 720 ? 0.42 : 0.62,
     })
-    window.setTimeout(() => setAnimating(false), 640)
-  }, [size])
+    window.setTimeout(() => setAnimating(false), 680)
+  }, [size, applyView])
 
   const guard = useCallback(() => dragMoved.current > DRAG_TOLERANCE, [])
 
   const visible = useMemo(() => {
-    const pad = 320
-    const halfW = size.w / (2 * view.scale) + pad
-    const halfH = size.h / (2 * view.scale) + pad
+    const halfW = size.w / (2 * view.scale) + VIEW_PADDING
+    const halfH = size.h / (2 * view.scale) + VIEW_PADDING
     const cx = (size.w / 2 - view.x) / view.scale
     const cy = (size.h / 2 - view.y) / view.scale
     return placed.filter((p) => Math.abs(p.x - cx) < halfW && Math.abs(p.y - cy) < halfH)
@@ -221,14 +269,14 @@ export function CanvasWall({
       onPointerCancel={endPointer}
       onDoubleClick={(e) => {
         const rect = shellRef.current!.getBoundingClientRect()
-        setView((v) => zoomAt(v, e.clientX - rect.left, e.clientY - rect.top, 1.55))
+        applyView(zoomAt(liveView.current, e.clientX - rect.left, e.clientY - rect.top, 1.55))
       }}
     >
       <div
         className="world"
         style={{
           transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`,
-          transition: animating ? 'transform 0.62s cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
+          transition: animating ? 'transform 0.68s cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
         }}
       >
         <div
@@ -248,11 +296,11 @@ export function CanvasWall({
             placed={p}
             messageCount={counts[p.photo.id] ?? 0}
             animate={!settled}
+            hiRes={hiRes}
             onOpen={onOpenPhoto}
             onDragGuard={guard}
           />
         ))}
-
       </div>
 
       {photos.length === 0 && (

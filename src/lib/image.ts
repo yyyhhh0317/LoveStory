@@ -1,4 +1,4 @@
-const THUMB_EDGE = 480
+const THUMB_EDGE = 720
 const FULL_EDGE = 2048
 
 export interface ProcessedImage {
@@ -147,7 +147,7 @@ export async function processImage(file: File): Promise<ProcessedImage> {
   if (!w || !h) throw new Error('图片尺寸异常')
 
   const [thumb, full] = await Promise.all([
-    toBlob(drawable, THUMB_EDGE, 0.82),
+    toBlob(drawable, THUMB_EDGE, 0.86),
     toBlob(drawable, FULL_EDGE, 0.86),
   ])
 

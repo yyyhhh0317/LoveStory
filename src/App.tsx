@@ -9,7 +9,7 @@ import { formatDay } from './lib/format'
 import { isRemote } from './lib/repo'
 import type { NewPhotoInput, Photo } from './lib/types'
 
-type Theme = 'paper' | 'blush'
+type Theme = 'cream' | 'blush'
 type ViewMode = 'timeline' | 'album'
 
 const THEME_KEY = 'yyyhhh:theme'
@@ -18,7 +18,7 @@ export default function App() {
   const album = useAlbum()
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem(THEME_KEY)
-    return saved === 'blush' ? 'blush' : 'paper'
+    return saved === 'blush' ? 'blush' : 'cream'
   })
   const [uploadOpen, setUploadOpen] = useState(false)
   const [viewer, setViewer] = useState<{ mode: ViewMode; photoId: string } | null>(null)
@@ -29,7 +29,7 @@ export default function App() {
     document.documentElement.dataset.theme = theme
     localStorage.setItem(THEME_KEY, theme)
     const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', theme === 'blush' ? '#FCEFF2' : '#F3EEE4')
+    if (meta) meta.setAttribute('content', theme === 'blush' ? '#FDF1F2' : '#FBF5EE')
   }, [theme])
 
   const say = (text: string) => {
@@ -121,10 +121,10 @@ export default function App() {
           <div className="theme-switch" role="group" aria-label="切换主题">
             <button
               type="button"
-              className={theme === 'paper' ? 'on' : ''}
-              onClick={() => setTheme('paper')}
+              className={theme === 'cream' ? 'on' : ''}
+              onClick={() => setTheme('cream')}
             >
-              纸感
+              奶油
             </button>
             <button
               type="button"

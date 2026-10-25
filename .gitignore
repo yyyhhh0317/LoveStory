@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-ssr
+.DS_Store
+*.local
+.env
+.env.local
+.env.*.local
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# 本地开发笔记（Agent 记忆）
+.workbuddy/

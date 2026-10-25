@@ -1,0 +1,158 @@
+# yyyhhh
+
+> 我们的照片，摊在时间里。
+
+一个只为两个人存在的恋爱照片记录站。照片不是排成列表，而是散在一块可以拖动、缩放的无限画布上；画布正中央摆着一本相册，翻开是你们挑出来的珍藏。
+
+---
+
+## 它长什么样
+
+**画布**——所有照片按拍摄时间沿黄金角螺旋向外铺开，越靠中心越早，越往外越新。每张照片的坐标只由它自己的时间序号决定，所以**新照片只会长在螺旋末端，旧照片的位置永远不动**。你补传几年前的旧照片，它也会自动落回正确的位置。
+
+**相册**——画布中心那本封面，收的是你标记为「珍藏」的照片。点开是全屏沉浸翻页，画面铺满、简介压在底部。
+
+**详情**——点画布上任意一张照片，进入同一套沉浸视图。区别只在切换序列：从相册进来翻的是珍藏那几本，从画布进来翻的是整条时间线，可以一路左右滑下去。
+
+**留言**——挂在每一张照片上的匿名便签。画布上照片角落有一枚小角标显示留言数，一眼就能看出哪张「有人说过话」。
+
+**两个主题**——`纸感`（米白纸底、衬线标题）与 `粉彩`（淡粉奶油底），右上角随时切换，会记住你的选择。进入沉浸视图时统一沉成近黑，照片像在暗房里发光。
+
+---
+
+## 快速开始
+
+```bash
+npm install
+npm run dev
+```
+
+打开 http://127.0.0.1:5173 即可。**什么都不配置也能用**——会自动进入「本地模式」，照片和留言都存在当前浏览器里（图片走 IndexedDB，绕开 localStorage 的 5MB 限制），适合先把玩和试看。
+
+---
+
+## 接入 Supabase（让两个人共享同一份相册）
+
+本地模式下你的手机和她的手机是两个互不相干的相册。要共享，必须要有一个后端，这里用 Supabase 免费版。
+
+1. 到 [supabase.com](https://supabase.com) 新建一个项目（免费，不需要信用卡）。
+2. 打开 **SQL Editor**，把 [`supabase/schema.sql`](supabase/schema.sql) 整段粘进去执行。它会建表、开 RLS、创建 `photos` 存储桶。
+3. 到 **Project Settings → API** 复制 `Project URL` 和 `anon public key`。
+4. 复制 `.env.example` 为 `.env.local`，填进去：
+
+```env
+VITE_SUPABASE_URL=https://xxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
+```
+
+5. 重启 `npm run dev`。右上角的「本地模式」标记会消失，此时两台设备打开同一个网址看到的就是同一份相册。
+
+**填完先自检一次**：
+
+```bash
+npm run check
+```
+
+它会只读地检查一遍：URL 格式对不对、key 是不是用错了 secret、两张表建没建、RLS 策略通不通、`photos` 存储桶是否公开。哪一步不对会直接告诉你该改什么，比在浏览器里对着「本地模式」猜要快得多。
+
+免费额度：1GB 文件存储 + 500MB 数据库。因为是浏览器端压两档上传（480px 缩略图 + 2048px 大图，WebP），**1GB 大约能放 2000–3000 张**。
+
+---
+
+## 部署到 GitHub Pages
+
+1. 推到 GitHub 的 `main` 分支。
+2. 仓库 **Settings → Pages → Source** 选 **GitHub Actions**。
+3. 仓库 **Settings → Secrets and variables → Actions** 添加两个 secret：
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+4. 之后每次 push 到 `main` 都会自动构建部署，`.github/workflows/deploy.yml` 已经写好。
+
+> 构建时用 `base: './'`，所以部署在 `https://用户名.github.io/仓库名/` 这种子路径下也能正常加载资源。
+
+---
+
+## 交互
+
+| 操作 | 桌面 | 手机 |
+|---|---|---|
+| 平移画布 | 拖动空白处 | 单指拖动 |
+| 缩放 | 滚轮 / 双击放大 | 双指捏合 |
+| 看大图 | 点击照片 | 点按照片 |
+| 翻相册 | 点中心相册 → 左右箭头 | 点中心相册 → 左右滑动 |
+| 留言 | 详情页右侧面板 | 右下角「留言」抽屉 |
+| 回到相册 | 右下角准星按钮 | 同 |
+
+沉浸视图里：`←` `→` 切换，`Esc` 退出；点简介文字即可编辑（`⌘/Ctrl + ↵` 保存）。
+
+---
+
+## 数据结构
+
+```sql
+photos   (id, storage_key, width, height, aspect, taken_at, caption,
+          featured_at, created_at, deleted_at)
+messages (id, photo_id, content, created_at, deleted_at)
+```
+
+两个刻意的设计：
+
+- **`storage_key` 而不是完整 URL**。数据库里只存目录名，图片地址在 `src/lib/repo/supabase.ts` 里统一拼出来。将来 1GB 不够了要换 Cloudflare R2 或腾讯云 COS，只改这一处，业务代码一行不动。
+- **`deleted_at` 而不是真删**。前台看不到，数据还在。
+
+注意一个连带的取舍：**删照片只隐藏记录，图片文件仍留在 Storage 里**。因为一旦给匿名用户开放 `storage.objects` 的 delete 权限，任何人就能真删图片、绕过软删除。所以这里选择了宁可多占一点空间，也不给破坏留下入口。空间实在紧张时，去 Storage 页面手动清理无主的目录即可。
+
+---
+
+## 关于「不做鉴权」
+
+按需求，这个站**不做登录**：任何人打开网页都能上传照片、改简介、留言。前提是「网址基本没人知道」。配合这条前提，代码里做了两道保险：
+
+1. **删除一律是软删除**，误删或被恶意删除后数据仍在，可以从数据库里捞回来。
+2. **上传的图片是双档压缩的**，不存原图，所以即使被灌入垃圾图片，消耗也有限。
+
+风险要说清楚：Supabase 的 anon key 必然打包在前端，任何人按 F12 都能拿到。**如果哪天链接被转发或被搜索引擎收录，相册内容就可能被陌生人改动。** 那一刻的正确做法是去 Supabase 把 RLS 里的 `photos insertable / updatable` 和 `messages insertable` 三条策略删掉，站点立刻变成只读，内容丝毫不会丢。
+
+### 定期备份
+
+Supabase 免费版**不提供自动备份**。建议每隔一段时间到 SQL Editor 跑一次：
+
+```sql
+select jsonb_pretty(jsonb_agg(to_jsonb(p) order by p.taken_at)) from public.photos p;
+select jsonb_pretty(jsonb_agg(to_jsonb(m) order by m.created_at)) from public.messages m;
+```
+
+把结果另存为 `.json` 就是一份完整备份。图片本体在 Storage 里，可以在 Storage 页面整桶下载。
+
+---
+
+## 目录结构
+
+```
+src/
+├── lib/
+│   ├── types.ts           数据模型与 Repo 接口
+│   ├── layout.ts          螺旋排布的全部数学（改这里就能调画布形态）
+│   ├── image.ts           EXIF 读取 + 双档压缩（不依赖第三方库）
+│   ├── format.ts          时间格式化、稳定哈希
+│   └── repo/
+│       ├── index.ts       有配置走 Supabase，没有就退回本地
+│       ├── local.ts       localStorage + IndexedDB
+│       └── supabase.ts    Postgres + Storage
+├── hooks/
+│   ├── useAlbum.ts        相册状态与增删改
+│   └── useImgUrl.ts       图片地址的同步读 + 异步补
+├── components/
+│   ├── CanvasWall.tsx     无限画布：平移、缩放、虚拟化渲染
+│   ├── AlbumBook.tsx      中心那本相册
+│   ├── PhotoCard.tsx      画布上的单张照片
+│   ├── Viewer.tsx         沉浸视图（相册翻页与详情共用）
+│   ├── MessageBoard.tsx   便签堆留言板
+│   └── UploadSheet.tsx    上传面板
+├── App.tsx                主题、路由状态、全局动作
+└── index.css              双主题变量 + 全部视觉细节
+supabase/schema.sql        一键建表、RLS、存储桶
+.github/workflows/deploy.yml
+```
+
+想调画布的手感，改 `src/lib/layout.ts` 顶部四个常量即可：`START_RADIUS`（螺旋起点离相册多远）、`SPREAD`（照片疏密）、`MAX_EDGE`（照片大小）、`FRAME`（相纸白边）。

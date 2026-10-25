@@ -354,7 +354,11 @@ function computeDoodles(view: View, size: { w: number; h: number }): Doodle[] {
           size,
           variant,
           color: (h >>> 8) % COLOR_N,
-          rot: (rand01(h >>> 5) - 0.5) * 26,
+          /*
+           * 倾斜：±26° 立方偏态分布 —— 立方让多数涂鸦落在直立附近
+           * （总体朝上），少数散到两端明显歪出去，屏与屏之间差异拉开。
+           */
+          rot: Math.pow(rand01(h >>> 5) - 0.5, 3) * 208,
           scale: 0.8 + rand01(h >>> 9) * 0.35,
           flip: (h & 64) !== 0,
           opacity: 0.55 + rand01(h >>> 13) * 0.15,

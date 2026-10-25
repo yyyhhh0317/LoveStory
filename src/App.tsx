@@ -55,7 +55,8 @@ export default function App() {
 
   const openAlbum = () => {
     if (!featured.length) {
-      say('相册还空着，先在照片上点一下星标')
+      // 星标只在详情页右上角，画布上没有。提示得指对地方，否则人会去画布上找
+      say('相册还空着 · 点开照片，右上角星标收进来')
       return
     }
     setViewer({ mode: 'album', photoId: featured[0].id })
@@ -178,7 +179,7 @@ export default function App() {
               className={theme === 'blush' ? 'on' : ''}
               onClick={() => setTheme('blush')}
             >
-              粉彩
+              莓奶
             </button>
           </div>
           <button

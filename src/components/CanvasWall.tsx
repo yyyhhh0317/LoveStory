@@ -3,6 +3,7 @@ import type { Photo } from '../lib/types'
 import { albumOrder, layoutTimeline } from '../lib/layout'
 import { PhotoCard } from './PhotoCard'
 import { AlbumBook } from './AlbumBook'
+import { CanvasDoodles } from './CanvasDoodles'
 import { PlusIcon, TargetIcon } from './icons'
 
 const MIN_SCALE = 0.16
@@ -357,6 +358,9 @@ export function CanvasWall({
           transition: animating ? 'transform 0.68s cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
         }}
       >
+        {/* 背景涂鸦：world 第一个孩子，垫在相册和照片下面，跟画布一起平移 */}
+        <CanvasDoodles view={view} size={size} />
+
         <div
           onClickCapture={(e) => {
             if (guard()) {

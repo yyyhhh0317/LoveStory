@@ -3,6 +3,7 @@ import { CanvasWall } from './components/CanvasWall'
 import { Viewer } from './components/Viewer'
 import { UploadSheet } from './components/UploadSheet'
 import { ConnectFail, LoadingScreen } from './components/ScreenStates'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { PlusIcon } from './components/icons'
 import { useAlbum } from './hooks/useAlbum'
 import { albumOrder, timelineOrder } from './lib/layout'
@@ -110,14 +111,20 @@ export default function App() {
         它会先渲染出自己的空态「还什么都没有」，正是要消灭的错觉。
       */}
       {album.phase === 'ready' && (
-        <CanvasWall
-          photos={album.photos}
-          counts={album.counts}
-          localOnly={!isRemote}
-          onOpenPhoto={openPhoto}
-          onOpenAlbum={openAlbum}
-          onRequestUpload={() => setUploadOpen(true)}
-        />
+        /*
+         * 画布单独兜一层：照片数据在 App 里，就算画布排崩了，
+         * 顶栏、主题、上传入口都还在，人还能继续做事。
+         */
+        <ErrorBoundary scope="canvas">
+          <CanvasWall
+            photos={album.photos}
+            counts={album.counts}
+            localOnly={!isRemote}
+            onOpenPhoto={openPhoto}
+            onOpenAlbum={openAlbum}
+            onRequestUpload={() => setUploadOpen(true)}
+          />
+        </ErrorBoundary>
       )}
 
       <header className="topbar">
@@ -164,20 +171,30 @@ export default function App() {
       </header>
 
       {viewer && sequence.length > 0 && (
-        <Viewer
-          photos={sequence}
-          index={index}
-          onIndexChange={changeIndex}
-          onClose={() => setViewer(null)}
-          onToggleFeatured={(p) => void toggleFeatured(p)}
-          onSaveCaption={(p, caption) => void album.setCaption(p.id, caption)}
-          onDelete={(p) => void deletePhoto(p)}
-          messageCount={album.counts[sequence[index]?.id ?? ''] ?? 0}
-          onMessageCountChange={(delta) => {
-            const id = sequence[index]?.id
-            if (id) album.bumpMessageCount(id, delta)
-          }}
-        />
+        /*
+         * 详情页也兜一层，并且把当前这张的 id 当 resetKey：
+         * 打不开这一张就退回来，换一张时错误自动清掉，不会一直被卡住。
+         */
+        <ErrorBoundary
+          scope="viewer"
+          resetKey={viewer.photoId}
+          onReset={() => setViewer(null)}
+        >
+          <Viewer
+            photos={sequence}
+            index={index}
+            onIndexChange={changeIndex}
+            onClose={() => setViewer(null)}
+            onToggleFeatured={(p) => void toggleFeatured(p)}
+            onSaveCaption={(p, caption) => void album.setCaption(p.id, caption)}
+            onDelete={(p) => void deletePhoto(p)}
+            messageCount={album.counts[sequence[index]?.id ?? ''] ?? 0}
+            onMessageCountChange={(delta) => {
+              const id = sequence[index]?.id
+              if (id) album.bumpMessageCount(id, delta)
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       <UploadSheet

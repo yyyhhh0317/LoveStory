@@ -1613,6 +1613,44 @@ textarea {
   min-width: 132px;
 }
 
+/* 两个按钮并排时不再各自居中 */
+.status-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.status-actions .status-retry {
+  margin: 0;
+}
+
+.status-actions .ghost-btn {
+  height: 40px;
+}
+
+/*
+ * 兜住沉浸视图时：压在它上面（.viewer 是 40），但底色留一点透。
+ * 「别的照片都还在」这句话得有东西作证 —— 让画布在背后隐隐透出来。
+ */
+.status-screen.is-overlay {
+  z-index: 45;
+  background: radial-gradient(
+      120% 92% at 50% 38%,
+      transparent 36%,
+      color-mix(in srgb, var(--bg-deep) 55%, transparent) 100%
+    ),
+    color-mix(in srgb, var(--bg) 88%, transparent);
+}
+
+/* 兜住画布时不能盖住顶栏，否则「还能用」就成空话 */
+.status-screen.is-inline {
+  z-index: 4;
+  background: transparent;
+}
+
 .status-card .status-reason {
   margin-top: 16px;
   font-size: 12px;
@@ -1651,7 +1689,10 @@ textarea {
   line-height: 1.7;
   color: var(--ink-soft);
   text-align: left;
-  word-break: break-all;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 168px;
+  overflow: auto;
 }
 
 @media (max-width: 720px) {

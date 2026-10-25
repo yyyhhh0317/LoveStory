@@ -95,6 +95,21 @@ export function Viewer({
 
   return (
     <div className="viewer">
+      {/*
+        氛围层：拿当前照片自己做底。缩到很小再放大，靠插值得到柔焦，
+        比直接对全屏元素做大半径 blur 便宜得多（小尺寸只光栅一次）。
+        每换一张照片它就整体淡入一次，跟着照片的色调走。
+      */}
+      {thumbUrl && (
+        <div
+          key={photo.id}
+          className="viewer-ambience"
+          style={{ backgroundImage: `url("${thumbUrl}")` }}
+          aria-hidden="true"
+        />
+      )}
+      <div className="viewer-veil" aria-hidden="true" />
+
       <div className="viewer-head">
         <div className="viewer-index">
           <b>{pad(index + 1)}</b> / {pad(photos.length)}

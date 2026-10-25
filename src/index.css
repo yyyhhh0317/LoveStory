@@ -39,6 +39,11 @@
   --book-ink: #6b4f38;
   --book-shade: 112, 82, 58;
 
+  /* 沉浸视图（恒暗色，但随主题偏暖/偏粉） */
+  --v-base: #1b1512;
+  --v-shade: 26, 19, 16;
+  --vpanel: rgba(26, 20, 17, 0.88);
+
   --warm: #e2a88b;
 
   --note-1: #fdf3e3;
@@ -78,6 +83,10 @@
   --book-2: #e8bfc9;
   --book-ink: #7a4d58;
   --book-shade: 134, 92, 102;
+
+  --v-base: #20151a;
+  --v-shade: 32, 21, 26;
+  --vpanel: rgba(32, 22, 28, 0.88);
 
   --warm: #e8a3ae;
 
@@ -705,11 +714,10 @@ textarea {
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: #171210;
+  background: var(--v-base, #1b1512);
   display: flex;
   flex-direction: column;
   animation: viewer-in 0.5s var(--ease);
-  --vpanel: #1e1815;
   --vink: #f4ece2;
   --vink-soft: rgba(244, 236, 226, 0.6);
   --vink-faint: rgba(244, 236, 226, 0.34);
@@ -724,6 +732,53 @@ textarea {
   to {
     opacity: 1;
   }
+}
+
+/* 照片磨砂：小画布 + 小半径模糊 + 放大，等效大半径柔焦但便宜得多 */
+.viewer-ambience {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 180px;
+  height: 180px;
+  margin: -90px 0 0 -90px;
+  background-position: center;
+  background-size: cover;
+  filter: blur(5px) saturate(1.3) brightness(0.55);
+  transform: scale(24);
+  pointer-events: none;
+  z-index: 0;
+  animation: ambience-in 0.85s var(--ease) both;
+}
+
+@keyframes ambience-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.62;
+  }
+}
+
+/* 暗色纱：上下压暗保证文字可读，中间留亮让照片自己说话 */
+.viewer-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+      125% 88% at 50% 42%,
+      rgba(var(--v-shade), 0) 32%,
+      rgba(var(--v-shade), 0.5) 100%
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(var(--v-shade), 0.48) 0%,
+      rgba(var(--v-shade), 0.1) 20%,
+      rgba(var(--v-shade), 0.16) 56%,
+      rgba(var(--v-shade), 0.76) 100%
+    );
+  background-color: rgba(var(--v-shade), 0.3);
 }
 
 .viewer-head {
@@ -775,6 +830,8 @@ textarea {
 }
 
 .viewer-body {
+  position: relative;
+  z-index: 2;
   flex: 1;
   min-height: 0;
   display: flex;

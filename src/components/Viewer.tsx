@@ -2,7 +2,7 @@ import { useLayoutEffect, useEffect, useRef, useState } from 'react'
 import { useImgUrl } from '../hooks/useImgUrl'
 import { repo } from '../lib/repo'
 import { formatDayCn } from '../lib/format'
-import type { Photo } from '../lib/types'
+import type { Photo, ImageVariant } from '../lib/types'
 import { FLIP_MS, prefersReducedMotion, type FrameRect } from '../lib/flight'
 import { FlightPhoto } from './FlightPhoto'
 import { MessageBoard } from './MessageBoard'
@@ -99,9 +99,12 @@ export function Viewer({
     /** 叶子正面显示的照片地址（往后翻 = 旧照片，往前翻 = 新照片） */
     leafSrc: string | null
     leafKey: string | null
+    /** 缓存未命中时叶子按哪一档补解析 */
+    leafVariant: ImageVariant
     /** 往回翻时垫在底下的旧照片地址 */
     underSrc: string | null
     underKey: string | null
+    underVariant: ImageVariant
   }
   const [turn, setTurn] = useState<BookTurn | null>(null)
   const turning = useRef(false)
@@ -359,23 +362,35 @@ export function Viewer({
       const dir: 1 | -1 = delta > 0 ? 1 : -1
       turning.current = true
 
+      /*
+       * 叶子上用哪一档图有讲究：刚显示过的那页 full 一定在缓存里
+       * （底下的 img 正放着呢），直接用 full 就不会有「翻起瞬间变糊」；
+       * 还没看过的那页只能先上 thumb，真图在底下那张 img 里同时加载。
+       */
+      const peek = (p: Photo, v: ImageVariant) =>
+        p.storageKey ? repo.peekUrl(p.storageKey, v) : null
+
       if (dir === 1) {
         setTurn({
           dir,
           page,
-          leafSrc: out.storageKey ? repo.peekUrl(out.storageKey, 'thumb') : null,
+          leafSrc: peek(out, 'full') ?? peek(out, 'thumb'),
           leafKey: out.storageKey ?? null,
+          leafVariant: 'full',
           underSrc: null,
           underKey: null,
+          underVariant: 'thumb',
         })
       } else {
         setTurn({
           dir,
           page,
-          leafSrc: inc.storageKey ? repo.peekUrl(inc.storageKey, 'thumb') : null,
+          leafSrc: peek(inc, 'thumb'),
           leafKey: inc.storageKey ?? null,
-          underSrc: out.storageKey ? repo.peekUrl(out.storageKey, 'thumb') : null,
+          leafVariant: 'thumb',
+          underSrc: peek(out, 'full') ?? peek(out, 'thumb'),
           underKey: out.storageKey ?? null,
+          underVariant: 'full',
         })
       }
 
@@ -400,7 +415,8 @@ export function Viewer({
     void Promise.all(
       missing.map(async (m) => {
         const key = (m === 'leaf' ? turn.leafKey : turn.underKey) as string
-        const url = await repo.resolveUrl(key, 'thumb').catch(() => null)
+        const variant = m === 'leaf' ? turn.leafVariant : turn.underVariant
+        const url = await repo.resolveUrl(key, variant).catch(() => null)
         return [m, url] as const
       })
     ).then((pairs) => {

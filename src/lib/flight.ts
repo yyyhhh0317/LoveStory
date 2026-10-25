@@ -21,5 +21,11 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-/** 飞行时长，和 CSS/关键帧无关，只由 JS 控制 */
-export const FLIGHT_MS = 460
+/**
+ * 飞行时长，和 CSS/关键帧无关，只由 JS 控制。
+ *
+ * 从 460 提到 520，同时把缓动换成起步快、尾巴长的曲线：
+ * 短时长 + 缓出不够，看起来像「弹过去又停住」；
+ * 稍长一点、末端慢慢收，才读得出「它在飞」而不是「它被甩过去」。
+ */
+export const FLIGHT_MS = 520

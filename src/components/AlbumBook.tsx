@@ -10,11 +10,17 @@ interface Props {
 }
 
 /** 封面转开的时长，和 CSS 里的 transition 对齐 */
-const SWING_MS = 360
-/** 转开之后停一下，让眼睛认出「翻开后露出的是一页照片」，再让它飞出去 */
-const HOLD_MS = 140
+const SWING_MS = 330
+/**
+ * 转开之后几乎不停，就让照片接手。
+ *
+ * 原来是 140ms —— 那一段停顿读起来像「翻完了，等一下，再去放大」，
+ * 中间有一拍空档，所以整体感觉是一顿一顿的。
+ * 现在只留 60ms：眼睛刚认出「露出了一页」，放大已经接上，两段连着走。
+ */
+const HOLD_MS = 60
 /** 合回去的时机：这时沉浸视图已经完全不透明地盖住上面了，复位看不见 */
-const RESET_MS = 1900
+const RESET_MS = 1800
 
 const HEART =
   'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 ' +
@@ -35,12 +41,8 @@ export function AlbumBook({ page, count, onOpen }: Props) {
 
   /*
    * 掀开 → 露一页 → 那张照片飞出去。
-   *
-   * 三步必须分开，不能合成一个：
-   * 1. 封面绕书脊转开（360ms）
-   * 2. 停 140ms —— 这一下是给眼睛的。「翻开」和「放大」如果同时发生，
-   *    看到的就是一张照片凭空变大，翻书这个动作就白做了。
-   * 3. 把内页那张图当前的屏幕位置交给上层，由沉浸视图接着飞。
+   * 三步仍然是分开的（合成一个动作就成了「照片凭空变大」，翻书白做），
+   * 但间隔压到最小，让三段在感觉上连成一段。
    *
    * 位置在第 2 步结束时才量：封面一转开，整本书会因为 translateY 挪几像素，
    * 提前量会差一点。
@@ -95,12 +97,16 @@ export function AlbumBook({ page, count, onOpen }: Props) {
       </div>
 
       {/*
-        封面是两张纸板：正面和背面在 Z 轴上分开 3.2px。
-        转过 90° 时看到的不是「什么都没有」，而是背板 + 两条 1px 边线，
-        那点厚度就是靠这两条线和 3.2px 的间距读出来的。
+        封面是一块纸板，不是一张纸：
+          - 正反两面在 Z 轴各偏移半厚，中间由左右两条侧壁连起来
+          - 侧壁就是「厚度」，转到 90° 时看到的是它，而不是凭空消失
+          - 纸纹、书脊凹槽、顶部受光都是静态层，只光栅一次
       */}
       <div className="album-cover">
         <div className="album-face album-face-front">
+          <span className="album-grain" aria-hidden="true" />
+          <span className="album-hinge" aria-hidden="true" />
+
           <svg className="album-doodles" viewBox="0 0 318 424" aria-hidden="true">
             <g fill="currentColor">
               <g transform="translate(30 46) scale(0.95) rotate(-12)">
@@ -143,9 +149,19 @@ export function AlbumBook({ page, count, onOpen }: Props) {
               {count > 0 ? `${count} FRAMES` : 'EMPTY'}
             </span>
           </div>
+
+          <span className="album-sheen" aria-hidden="true" />
         </div>
 
-        <div className="album-face album-face-back" aria-hidden="true" />
+        <div className="album-face album-face-back" aria-hidden="true">
+          <span className="album-grain" aria-hidden="true" />
+          <span className="album-hinge" aria-hidden="true" />
+          <span className="album-lining" aria-hidden="true" />
+        </div>
+
+        {/* 两条侧壁：纸板的厚度，转到侧面时看到的就是它们 */}
+        <span className="album-edge album-edge-right" aria-hidden="true" />
+        <span className="album-edge album-edge-left" aria-hidden="true" />
       </div>
     </div>
   )

@@ -231,11 +231,25 @@ export function Viewer({
   return (
     <div className={`viewer${flew ? ' is-flight' : ''}`}>
       {/*
+        底色层。
+        飞行时画布还亮着，若直接让 .viewer 淡入，画布顶栏会和详情页标题
+        叠成两层字；若硬切，又像「啪」一下关灯。
+        折中：这一层从一开始就**完全不透明**（挡住画布，不会叠字），
+        只让它的颜色从画布底色过渡到暗色 —— 读起来是「灯慢慢暗下来」。
+        它独立成一个兄弟层，所以颜色变化不会连带把飞行中的照片一起淡掉。
+      */}
+      <div className="viewer-wash" aria-hidden="true" />
+
+      {/*
         氛围层：拿当前照片自己做底。缩到很小再放大，靠插值得到柔焦，
         比直接对全屏元素做大半径 blur 便宜得多（小尺寸只光栅一次）。
         每换一张照片它就整体淡入一次，跟着照片的色调走。
+
+        飞行期间**不渲染**：它是一块 2300×2300 的合成层，新分配图层要几十毫秒，
+        正好和飞行层的首帧撞在一起，就是那下卡顿。等照片落地再挂上，
+        它本来也是慢慢淡入的，看不出是后来的。
       */}
-      {thumbUrl && (
+      {thumbUrl && landed && (
         <div
           key={photo.id}
           className="viewer-ambience"
@@ -314,7 +328,9 @@ export function Viewer({
                   ? { ['--turn' as string]: String(turn) }
                   : {}),
                 // 飞行层落地的同一帧换成真图，两者位置像素级对齐，看不出接缝
-                ...(isFirstShot ? { animation: 'none', opacity: landed ? 1 : 0 } : {}),
+                ...(isFirstShot
+                  ? { animation: 'none', opacity: landed ? 1 : 0 }
+                  : {}),
               }}
               src={fullUrl ?? thumbUrl ?? undefined}
               alt={photo.caption ?? ''}

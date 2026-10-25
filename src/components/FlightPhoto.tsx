@@ -42,16 +42,27 @@ export function FlightPhoto({ from, to, src, onDone }: Props) {
     const dx = from.x + from.w / 2 - (to.x + to.w / 2)
     const dy = from.y + from.h / 2 - (to.y + to.h / 2)
 
+    /*
+     * 只动 transform，不动 border-radius。
+     *
+     * border-radius 不是合成属性 —— 把它放进同一组关键帧，浏览器每一帧
+     * 都要重绘整张 868×651 的图（连阴影一起重画），飞行立刻变得一顿一顿。
+     * 圆角固定 8px：起点那张缩略图本来也接近这个值，中间过渡看不出来。
+     */
     const anim = el.animate(
-      [
-        {
-          transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
-          // 起点跟缩略图一样是直角，落点和详情页一样是 8px 圆角
-          borderRadius: '2px',
-        },
-        { transform: 'translate(0px, 0px) scale(1, 1)', borderRadius: '8px' },
-      ],
-      { duration: FLIGHT_MS, easing: 'cubic-bezier(0.22, 0.62, 0.3, 1)', fill: 'forwards' }
+      [{ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }, { transform: 'none' }],
+      {
+        duration: FLIGHT_MS,
+        /*
+         * 曲线要「匀」，不能「弹」。
+         * 原来那条 (0.2, 0.74, 0.14, 1) 在 38% 时间点已经走完 89% 的距离：
+         * 照片几乎瞬移到终点，剩下大半时间杵着不动 —— 手感就是「冲过去、停住」，
+         * 这才是「不连贯」的真正来源。Material 的标准曲线在 38% 时约 52%，
+         * 全程接近匀速、尾巴收得干净。
+         */
+        easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+        fill: 'forwards',
+      }
     )
 
     anim.onfinish = finish

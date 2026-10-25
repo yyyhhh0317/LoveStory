@@ -40,7 +40,7 @@
   --book-shade: 112, 82, 58;
 
   /* 沉浸视图（恒暗色，但随主题偏暖/偏粉） */
-  --v-base: #1b1512;
+  --v-base: #241a15;
   --v-shade: 26, 19, 16;
   --vpanel: rgba(26, 20, 17, 0.88);
 
@@ -84,7 +84,7 @@
   --book-ink: #7a4d58;
   --book-shade: 134, 92, 102;
 
-  --v-base: #20151a;
+  --v-base: #2a1b22;
   --v-shade: 32, 21, 26;
   --vpanel: rgba(32, 22, 28, 0.88);
 
@@ -744,7 +744,7 @@ textarea {
   margin: -90px 0 0 -90px;
   background-position: center;
   background-size: cover;
-  filter: blur(5px) saturate(1.3) brightness(0.55);
+  filter: blur(5px) saturate(1.22) brightness(var(--amb-b, 0.8));
   transform: scale(24);
   pointer-events: none;
   z-index: 0;
@@ -756,7 +756,7 @@ textarea {
     opacity: 0;
   }
   to {
-    opacity: 0.62;
+    opacity: 0.9;
   }
 }
 
@@ -768,17 +768,21 @@ textarea {
   pointer-events: none;
   background: radial-gradient(
       125% 88% at 50% 42%,
-      rgba(var(--v-shade), 0) 32%,
-      rgba(var(--v-shade), 0.5) 100%
+      rgba(var(--v-shade), 0) 50%,
+      rgba(var(--v-shade), 0.24) 100%
     ),
     linear-gradient(
       to bottom,
-      rgba(var(--v-shade), 0.48) 0%,
-      rgba(var(--v-shade), 0.1) 20%,
-      rgba(var(--v-shade), 0.16) 56%,
-      rgba(var(--v-shade), 0.76) 100%
+      rgba(var(--v-shade), 0.26) 0%,
+      rgba(var(--v-shade), 0.01) 15%,
+      rgba(var(--v-shade), 0.02) 50%,
+      rgba(var(--v-shade), 0.7) 100%
+    ),
+    linear-gradient(
+      rgba(255, 246, 235, 0.05),
+      rgba(255, 246, 235, 0.05)
     );
-  background-color: rgba(var(--v-shade), 0.3);
+  background-color: rgba(var(--v-shade), 0.04);
 }
 
 .viewer-head {
@@ -792,6 +796,7 @@ textarea {
 }
 
 .viewer-index {
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
   font-family: var(--font-serif);
   font-size: 12px;
   letter-spacing: 0.2em;
@@ -859,7 +864,7 @@ textarea {
   max-height: 100%;
   object-fit: contain;
   border-radius: 8px;
-  box-shadow: 0 40px 76px -32px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 44px 84px -30px rgba(0, 0, 0, 0.8), 0 8px 20px -10px rgba(0, 0, 0, 0.45);
   animation: img-in 0.55s var(--ease);
   user-select: none;
   -webkit-user-drag: none;
@@ -923,6 +928,7 @@ textarea {
 }
 
 .viewer-caption .date {
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.32);
   font-size: 11px;
   letter-spacing: 0.16em;
   color: var(--vink-faint);
@@ -931,6 +937,7 @@ textarea {
 }
 
 .viewer-caption .text {
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.4);
   font-family: var(--font-serif);
   font-size: 16px;
   line-height: 1.95;

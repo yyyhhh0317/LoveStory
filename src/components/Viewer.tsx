@@ -43,6 +43,7 @@ export function Viewer({
   const [draft, setDraft] = useState('')
   const [annotOpen, setAnnotOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [ambLum, setAmbLum] = useState<number | null>(null)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
   const textRef = useRef<HTMLTextAreaElement>(null)
 
@@ -55,6 +56,52 @@ export function Viewer({
   useEffect(() => {
     if (editing) textRef.current?.focus()
   }, [editing])
+
+  /*
+   * 读一下这张照片的平均亮度，用来给氛围层定亮度。
+   * 不分照片一律提亮的话：白墙/雪景会把背景冲成浅灰，深色夜景又黑得发闷。
+   * 缩略图走 Supabase 公开桶，带 Access-Control-Allow-Origin: *，可以安全读像素。
+   */
+  useEffect(() => {
+    setAmbLum(null)
+    if (!thumbUrl) return
+    let alive = true
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = 8
+        canvas.height = 8
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        ctx.drawImage(img, 0, 0, 8, 8)
+        const data = ctx.getImageData(0, 0, 8, 8).data
+        let sum = 0
+        let count = 0
+        for (let i = 0; i < data.length; i += 4) {
+          sum +=
+            (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255
+          count++
+        }
+        if (alive && count > 0) setAmbLum(sum / count)
+      } catch {
+        /* 画布被污染就退回默认亮度 */
+      }
+    }
+    img.src = thumbUrl
+    return () => {
+      alive = false
+    }
+  }, [thumbUrl])
+
+  /*
+   * 把背景平均亮度拉到 0.32 附近：暗照片提亮、亮照片压暗。
+   * 上限 1.55 是刻意的——再高，深色夜景会被抬得比照片本身还亮，
+   * 照片就从「主体」变成了「一块暗补丁」。
+   */
+  const ambBrightness =
+    ambLum == null ? 0.82 : Math.min(1.55, Math.max(0.3, 0.32 / Math.max(ambLum, 0.05)))
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -104,7 +151,10 @@ export function Viewer({
         <div
           key={photo.id}
           className="viewer-ambience"
-          style={{ backgroundImage: `url("${thumbUrl}")` }}
+          style={{
+            backgroundImage: `url("${thumbUrl}")`,
+            ['--amb-b' as string]: String(ambBrightness),
+          }}
           aria-hidden="true"
         />
       )}

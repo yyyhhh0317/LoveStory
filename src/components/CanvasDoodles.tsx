@@ -7,7 +7,7 @@ import { useMemo } from 'react'
  *   - 只放画布背景、跟 world 平移、全部静态、零运行时动效
  *   - 固定 seed 伪随机撒点：网格制，每个位置永远长同一株涂鸦，
  *     拖到哪都有；相册周围 350 单位内不长，不抢封面
- *   - 元素 15 变体：爱心×3 气球×3 波浪×2 彩虹×2 love×2 + 星星/雏菊/糖豆调剂
+ *   - 元素 13 变体：爱心×3 气球×3 波浪×2 彩虹×2 + 星星/雏菊/糖豆调剂
  *   - 质感 5 种：马克笔 / 果冻贴纸 / 蜡笔颗粒(feTurbulence，静态只光栅一次) /
  *     虚线绣线 / 闪粉点阵；彩色描边下都垫一道白，压到照片边上也读得清
  *   - 颜色：cream/blush 各自的主题衍生 6 色糖果盘（--doodle-1..6），
@@ -28,7 +28,7 @@ const CELL_H = 620
 /** 相册在原点，这一圈不让涂鸦长进来 */
 const ALBUM_CLEAR = 350
 /** 变体总数 */
-const VARIANT_N = 15
+const VARIANT_N = 13
 const COLOR_N = 6
 
 /** 整数散列：同一个格子永远得到同一串随机数 */
@@ -223,50 +223,8 @@ function Shape({ v, c }: ShapeProps) {
         </g>
       )
 
-    /* ---------- love ×2 ---------- */
-    case 10: // 连笔手写 love（马克笔）
-      return (
-        <g fill="none" strokeLinecap="round" strokeLinejoin="round" transform="translate(0 7)">
-          <path
-            d="M20 28 C 15 42, 13 56, 19 59 C 23 61, 26 56, 25 51 M 30 52 C 28 45, 33 40, 38 41 C 44 42, 45 49, 41 53 C 37 57, 31 56, 30 52 M 52 42 C 54 48, 56 52, 59 53 C 62 52, 64 46, 65 40 M 72 47 C 66 44, 61 48, 62 53 C 63 58, 69 59, 74 55 C 77 52, 78 48, 78 44 C 78 51, 77 56, 75 60"
-            stroke="#fffdf6"
-            strokeWidth={10}
-            opacity={0.9}
-          />
-          <path
-            d="M20 28 C 15 42, 13 56, 19 59 C 23 61, 26 56, 25 51 M 30 52 C 28 45, 33 40, 38 41 C 44 42, 45 49, 41 53 C 37 57, 31 56, 30 52 M 52 42 C 54 48, 56 52, 59 53 C 62 52, 64 46, 65 40 M 72 47 C 66 44, 61 48, 62 53 C 63 58, 69 59, 74 55 C 77 52, 78 48, 78 44 C 78 51, 77 56, 75 60"
-            stroke={col(c)}
-            strokeWidth={4.8}
-          />
-        </g>
-      )
-    case 11: // 双圈徽章 + 迷你 love
-      return (
-        <g fill="none">
-          <circle
-            cx={50}
-            cy={50}
-            r={33}
-            stroke={col(c)}
-            strokeWidth={4.5}
-            strokeLinecap="round"
-            strokeDasharray="0.1 9.5"
-          />
-          <circle cx={50} cy={50} r={26} stroke={col(c + 3)} strokeWidth={2.6} opacity={0.8} />
-          <g transform="translate(50 54) scale(0.56) translate(-50 -44)">
-            <path
-              d="M20 28 C 15 42, 13 56, 19 59 C 23 61, 26 56, 25 51 M 30 52 C 28 45, 33 40, 38 41 C 44 42, 45 49, 41 53 C 37 57, 31 56, 30 52 M 52 42 C 54 48, 56 52, 59 53 C 62 52, 64 46, 65 40 M 72 47 C 66 44, 61 48, 62 53 C 63 58, 69 59, 74 55 C 77 52, 78 48, 78 44 C 78 51, 77 56, 75 60"
-              stroke={col(c + 1)}
-              strokeWidth={6}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </g>
-        </g>
-      )
-
     /* ---------- 调剂 ×3 ---------- */
-    case 12: // 闪粉星星
+    case 10: // 闪粉星星
       return (
         <g>
           <path
@@ -282,7 +240,7 @@ function Shape({ v, c }: ShapeProps) {
           <circle cx={84} cy={72} r={2.4} fill={col(c + 1)} />
         </g>
       )
-    case 13: // 小雏菊（蜡笔）
+    case 11: // 小雏菊（蜡笔）
       return (
         <g filter="url(#doodle-crayon)">
           {[0, 60, 120, 180, 240, 300].map((a) => (
@@ -302,7 +260,7 @@ function Shape({ v, c }: ShapeProps) {
         </g>
       )
     default: {
-      // 14: 糖豆圆点串（闪粉）
+      // 12: 糖豆圆点串（闪粉）
       const dots = [
         [16, 56],
         [27, 47],

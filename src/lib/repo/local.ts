@@ -69,6 +69,25 @@ export class LocalRepo implements Repo {
   }
 
   async createPhoto(input: NewPhotoInput): Promise<Photo> {
+    /*
+     * 本地模式同样要幂等：重试时 storageKey 不变，
+     * 已经入过库的那一张直接认领，不要再 push 出一行重复的。
+     */
+    const existing = readJson<Photo[]>(PHOTOS_KEY, []).find(
+      (p) => p.storageKey === input.storageKey
+    )
+    if (existing) {
+      if (existing.deletedAt) {
+        const all = readJson<Photo[]>(PHOTOS_KEY, [])
+        writeJson(
+          PHOTOS_KEY,
+          all.map((p) => (p.id === existing.id ? { ...p, deletedAt: null } : p))
+        )
+        return { ...existing, deletedAt: null }
+      }
+      return existing
+    }
+
     const photo: Photo = {
       id: uid(),
       storageKey: input.storageKey,

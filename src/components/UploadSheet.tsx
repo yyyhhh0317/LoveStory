@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { processImage } from '../lib/image'
 import { fromDateInputValue, toDateInputValue, uid } from '../lib/format'
-import type { NewPhotoInput } from '../lib/types'
+import type { NewPhotoInput, Photo } from '../lib/types'
 import { CloseIcon } from './icons'
 
 interface PendingItem {
@@ -19,7 +19,7 @@ interface PendingItem {
 interface Props {
   open: boolean
   onClose: () => void
-  onSubmit: (items: NewPhotoInput[]) => Promise<void>
+  onSubmit: (items: NewPhotoInput[]) => Promise<{ created: Photo[]; failed: NewPhotoInput[] }>
   onDone: (count: number) => void
 }
 
@@ -98,11 +98,29 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
         thumb: it.thumb,
         full: it.full,
       }))
-      await onSubmit(payload)
-      onDone(payload.length)
-      onClose()
+      const { created, failed } = await onSubmit(payload)
+
+      if (!failed.length) {
+        onDone(created.length)
+        onClose()
+        return
+      }
+
+      /*
+       * 部分失败：面板留着，只保留没上去的那几张。
+       * 关键是 **保留它们原来的 key**——重试时 storageKey 不变，
+       * 仓储层才能把已经传好的那一档认领回来，而不是撞「已存在」。
+       */
+      const failedKeys = new Set(failed.map((f) => f.storageKey))
+      setItems((prev) => prev.filter((it) => failedKeys.has(it.key)))
+      setError(
+        created.length
+          ? `收进来 ${created.length} 张，还有 ${failed.length} 张没上去。再点一次「收进来」接着传就好。`
+          : `这 ${failed.length} 张都没传上去，可能是网络断了，再点一次试试。`
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : '上传失败，检查一下网络')
+    } finally {
       setBusy(false)
     }
   }

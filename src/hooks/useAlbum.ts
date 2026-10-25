@@ -85,13 +85,29 @@ export function useAlbum() {
     return () => window.removeEventListener('online', onOnline)
   }, [reload])
 
+  /**
+   * 逐张上传，失败的不打断整批。
+   * 返回 created / failed 两份，面板据此决定是关掉还是留在原地续传。
+   * 重试时调用方会传回同一批 items（storageKey 不变），仓储层已做幂等。
+   */
   const addPhotos = useCallback(async (items: NewPhotoInput[]) => {
     const created: Photo[] = []
+    const failed: NewPhotoInput[] = []
     for (const item of items) {
-      created.push(await repo.createPhoto(item))
+      try {
+        const photo = await repo.createPhoto(item)
+        if (!created.some((p) => p.id === photo.id)) created.push(photo)
+      } catch {
+        failed.push(item)
+      }
     }
-    setPhotos((prev) => [...prev, ...created])
-    return created
+    if (created.length) {
+      setPhotos((prev) => {
+        const seen = new Set(prev.map((p) => p.id))
+        return [...prev, ...created.filter((p) => !seen.has(p.id))]
+      })
+    }
+    return { created, failed }
   }, [])
 
   const setCaption = useCallback(async (id: string, caption: string | null) => {

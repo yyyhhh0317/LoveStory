@@ -81,9 +81,7 @@ export default function App() {
     say('已移出画布')
   }
 
-  const handleUpload = async (items: NewPhotoInput[]) => {
-    await album.addPhotos(items)
-  }
+  const handleUpload = (items: NewPhotoInput[]) => album.addPhotos(items)
 
   const subtitle = useMemo(() => {
     if (album.phase === 'loading') return '正在翻开…'

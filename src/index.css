@@ -164,9 +164,11 @@ textarea {
   background: var(--frame);
   border-radius: 2px;
   box-shadow: var(--shadow-photo);
-  transition: box-shadow 0.35s var(--ease), transform 0.35s var(--ease);
+  transition: box-shadow 0.42s var(--ease);
   cursor: pointer;
   opacity: 0;
+  /* 基础位移必须写在这里：动画被关掉时（animate=false）卡片依然居中且带倾角 */
+  transform: translate(-50%, -50%) rotate(var(--tilt, 0deg));
   animation: photo-in 0.75s var(--ease) forwards;
   will-change: transform;
 }
@@ -182,21 +184,41 @@ textarea {
   }
 }
 
-.photo-card img {
+.photo-crop {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 1px;
+}
+
+.photo-crop img {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 1px;
   user-select: none;
   -webkit-user-drag: none;
-  transition: filter 0.4s var(--ease);
+  transition: transform 0.7s var(--ease);
 }
 
+.photo-crop .photo-blank {
+  width: 100%;
+  height: 100%;
+  background: var(--surface-2);
+}
+
+/*
+ * 悬停只改阴影，绝不动几何 —— 缩放会让卡片边缘在鼠标底下进出，
+ * 触发 hover 抖动。要「放大」就让照片在相纸框内自己放大。
+ */
 .photo-card:hover {
   z-index: 20;
   box-shadow: var(--shadow-photo-hover);
-  transform: translate(-50%, -50%) scale(1.045) rotate(0deg) !important;
+}
+
+.photo-card:hover .photo-crop img {
+  transform: scale(1.06);
 }
 
 .photo-card .pin {

@@ -63,6 +63,7 @@ export function CanvasWall({
     vy: number
   } | null>(null)
   const dragMoved = useRef(0)
+  const capturedIds = useRef(new Set<number>())
 
   const placed = useMemo(() => layoutTimeline(photos), [photos])
   const cover = useMemo(() => albumCover(photos), [photos])
@@ -97,7 +98,11 @@ export function CanvasWall({
     const el = shellRef.current
     if (!el) return
     setSettled(true)
-    el.setPointerCapture(e.pointerId)
+    /*
+     * 这里故意不 capture。setPointerCapture 会把后续的 pointerup / click
+     * 都重定向到画布容器上，卡片自己的 onClick 就再也收不到事件了。
+     * 捕获推迟到「判定为拖动」之后再做。
+     */
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     dragMoved.current = 0
 
@@ -105,6 +110,15 @@ export function CanvasWall({
       panStart.current = { px: e.clientX, py: e.clientY, vx: view.x, vy: view.y }
       setDragging(true)
     } else if (pointers.current.size === 2) {
+      // 双指只可能是捏合缩放，不会产生点击，可以立刻捕获
+      pointers.current.forEach((_, id) => {
+        try {
+          el.setPointerCapture(id)
+          capturedIds.current.add(id)
+        } catch {
+          /* 手指已经抬起 */
+        }
+      })
       const [a, b] = [...pointers.current.values()]
       pinchStart.current = {
         dist: Math.hypot(a.x - b.x, a.y - b.y),
@@ -142,12 +156,24 @@ export function CanvasWall({
       const dx = e.clientX - panStart.current.px
       const dy = e.clientY - panStart.current.py
       dragMoved.current = Math.max(dragMoved.current, Math.hypot(dx, dy))
+
+      // 越过容差才认定是拖动，此时才捕获指针，保证拖出窗口也不丢事件
+      if (dragMoved.current > DRAG_TOLERANCE && !capturedIds.current.has(e.pointerId)) {
+        try {
+          shellRef.current?.setPointerCapture(e.pointerId)
+          capturedIds.current.add(e.pointerId)
+        } catch {
+          /* 忽略 */
+        }
+      }
+
       setView((v) => ({ ...v, x: panStart.current!.vx + dx, y: panStart.current!.vy + dy }))
     }
   }
 
   const endPointer = (e: React.PointerEvent) => {
     pointers.current.delete(e.pointerId)
+    capturedIds.current.delete(e.pointerId)
     if (pointers.current.size === 0) {
       panStart.current = null
       pinchStart.current = null
@@ -169,7 +195,7 @@ export function CanvasWall({
     window.setTimeout(() => setAnimating(false), 640)
   }, [size])
 
-  const guard = () => dragMoved.current > DRAG_TOLERANCE
+  const guard = useCallback(() => dragMoved.current > DRAG_TOLERANCE, [])
 
   const visible = useMemo(() => {
     const pad = 320
@@ -222,7 +248,7 @@ export function CanvasWall({
             placed={p}
             messageCount={counts[p.photo.id] ?? 0}
             animate={!settled}
-            onOpen={() => onOpenPhoto(p.photo)}
+            onOpen={onOpenPhoto}
             onDragGuard={guard}
           />
         ))}

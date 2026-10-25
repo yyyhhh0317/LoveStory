@@ -84,6 +84,7 @@ npm run check
 | 翻相册 | 点中心相册 → 左右箭头 | 点中心相册 → 左右滑动 |
 | 留言 | 详情页右侧面板 | 右下角「留言」抽屉 |
 | 回到相册 | 右下角准星按钮 | 同 |
+| 删除照片 | 详情页右上角垃圾桶，**按两下**（第一下变红） | 同 |
 
 沉浸视图里：`←` `→` 切换，`Esc` 退出；点简介文字即可编辑（`⌘/Ctrl + ↵` 保存）。
 
@@ -115,9 +116,39 @@ messages (id, photo_id, content, created_at, deleted_at)
 两个刻意的设计：
 
 - **`storage_key` 而不是完整 URL**。数据库里只存目录名，图片地址在 `src/lib/repo/supabase.ts` 里统一拼出来。将来 1GB 不够了要换 Cloudflare R2 或腾讯云 COS，只改这一处，业务代码一行不动。
-- **`deleted_at` 而不是真删**。前台看不到，数据还在。
+- **`deleted_at` 而不是真删**。前台看不到，行还在表里。注意这只是数据层面的——界面上没有找回入口，详见下一节。
 
 注意一个连带的取舍：**删照片只隐藏记录，图片文件仍留在 Storage 里**。因为一旦给匿名用户开放 `storage.objects` 的 delete 权限，任何人就能真删图片、绕过软删除。所以这里选择了宁可多占一点空间，也不给破坏留下入口。空间实在紧张时，去 Storage 页面手动清理无主的目录即可。
+
+---
+
+## 删除就是删掉了
+
+界面里**没有回收站，也没有撤销**。删掉的照片不会出现在任何地方，站点里也没有入口能把它找回来。
+
+唯一的缓冲是删除动作本身要按两下：详情页右上角的垃圾桶，第一下图标变红并提示「再点一次确认」，**3.2 秒内**再点一下才真的删；不点就自动复位。这几秒就是全部的保护。
+
+数据库层面仍然是软删除——`deleted_at` 打一个时间戳，行留在表里。它带来两件事：
+
+- 页面上所有查询都过滤掉 `deleted_at is not null` 的记录，所以看不见；
+- **真要找回只能进 Supabase 后台手工改数据**，前端不提供这个能力，两个人的相册也不该为一次手滑常驻一个回收站。
+
+万一确实误删了，去 SQL Editor 跑这两句：
+
+```sql
+-- 1. 列出被删掉的照片，最近的在前
+select id, taken_at, caption, deleted_at
+from public.photos
+where deleted_at is not null
+order by deleted_at desc;
+
+-- 2. 把上一步查到的 id 填进去，它就回到画布上原来的位置
+update public.photos set deleted_at = null where id = '粘贴上一步的 id';
+```
+
+位置是算出来的（由 `taken_at` 决定），不是存下来的，所以恢复后和删除前一模一样。图片文件也从没被删过——软删除不动 Storage——恢复不需要重新上传。
+
+所以请按这个前提使用：**按完两下，那张就没了。** 想留住的东西，靠后面「定期备份」那一节，比什么都稳。
 
 ---
 
@@ -125,7 +156,7 @@ messages (id, photo_id, content, created_at, deleted_at)
 
 按需求，这个站**不做登录**：任何人打开网页都能上传照片、改简介、留言。前提是「网址基本没人知道」。配合这条前提，代码里做了两道保险：
 
-1. **删除一律是软删除**，误删或被恶意删除后数据仍在，可以从数据库里捞回来。
+1. **删除在数据库层面是软删除**，被删的行不会真的消失。但要说清楚：**界面上没有回收站，也没有撤销**，被匿名访客删掉的照片当场就看不见了，找回得自己进 Supabase 改数据（语句见上一节）。这道保险防的是「数据彻底没了」，不是「点了就能反悔」。
 2. **上传的图片是双档压缩的**，不存原图，所以即使被灌入垃圾图片，消耗也有限。
 
 风险要说清楚：Supabase 的 anon key 必然打包在前端，任何人按 F12 都能拿到。**如果哪天链接被转发或被搜索引擎收录，相册内容就可能被陌生人改动。** 那一刻的正确做法是去 Supabase 把 RLS 里的 `photos insertable / updatable` 和 `messages insertable` 三条策略删掉，站点立刻变成只读，内容丝毫不会丢。
@@ -139,7 +170,7 @@ select jsonb_pretty(jsonb_agg(to_jsonb(p) order by p.taken_at)) from public.phot
 select jsonb_pretty(jsonb_agg(to_jsonb(m) order by m.created_at)) from public.messages m;
 ```
 
-把结果另存为 `.json` 就是一份完整备份。图片本体在 Storage 里，可以在 Storage 页面整桶下载。
+把结果另存为 `.json` 就是一份完整备份。这两句**没有过滤 `deleted_at`**，所以删掉的照片也在里面——它同时也是「误删之后唯一一份不依赖后台操作的底」。图片本体在 Storage 里，可以在 Storage 页面整桶下载。
 
 ---
 

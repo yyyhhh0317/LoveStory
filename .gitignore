@@ -8,7 +8,10 @@ dist-ssr
 .env.*.local
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 
-# 本地开发笔记（Agent 记忆）
+# 本地测试截图（Playwright 跑验证时产生，不入库）
+shots/
+
+# 本地开发笔记
 .workbuddy/

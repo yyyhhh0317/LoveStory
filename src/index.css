@@ -199,6 +199,13 @@ textarea {
   animation: photo-in 0.8s var(--ease) forwards;
 }
 
+/* 关掉入场动画时（平移后新进入视野的卡片）必须显式可见：
+   入场动画的初始态是 opacity:0，靠 forwards 才有终态 */
+.photo-card.no-anim {
+  animation: none;
+  opacity: 1;
+}
+
 @keyframes photo-in {
   from {
     opacity: 0;

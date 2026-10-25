@@ -32,15 +32,13 @@ export const PhotoCard = memo(function PhotoCard({
   return (
     <button
       type="button"
-      className={`photo-card${photo.featuredAt ? ' is-featured' : ''}`}
+      className={`photo-card${photo.featuredAt ? ' is-featured' : ''}${animate ? '' : ' no-anim'}`}
       style={{
         left: x,
         top: y,
         width: w,
         height: h,
         ['--tilt' as string]: `${tilt}deg`,
-        animation: animate ? undefined : 'none',
-        opacity: animate ? undefined : 1,
         animationDelay: `${delay}ms`,
       }}
       onClick={() => {

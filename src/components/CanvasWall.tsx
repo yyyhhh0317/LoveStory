@@ -39,6 +39,62 @@ function zoomAt(view: View, mx: number, my: number, factor: number): View {
 
 const initialScale = () => (window.innerWidth < 720 ? 0.42 : 0.62)
 
+interface Anchor {
+  x: number
+  y: number
+  hw: number
+  hh: number
+}
+
+/**
+ * 平移软边界。
+ *
+ * 无限画布如果不设限，手机上一次大幅滑动就能把视口甩到内容之外的空地：
+ * 那一刻虚拟化筛出 0 张照片、相册也在屏幕外，屏幕上只剩底色，看起来就是
+ * 「清屏」。所以这里约束的不是「包围盒」，而是「最近的实体」——只要视口里
+ * 还压着任意一张照片或相册的一部分，就允许继续平移。
+ */
+function constrainView(
+  view: View,
+  size: { w: number; h: number },
+  anchors: Anchor[]
+): View {
+  if (!anchors.length || size.w < 1 || size.h < 1) return view
+  const scale = view.scale
+  if (!Number.isFinite(scale) || scale <= 0) return view
+
+  const halfW = size.w / (2 * scale)
+  const halfH = size.h / (2 * scale)
+  const cx = (size.w / 2 - view.x) / scale
+  const cy = (size.h / 2 - view.y) / scale
+  // 收紧到「最近的实体至少有一大半落在视口里」，否则边界太松，
+  // 停下来时只能看到照片的一个边角，观感上和清屏差别不大。
+  const padX = halfW * 0.55
+  const padY = halfH * 0.55
+
+  let best: Anchor | null = null
+  let bestDist = Infinity
+  for (const a of anchors) {
+    const mx = halfW + a.hw - padX
+    const my = halfH + a.hh - padY
+    const dx = Math.max(0, Math.abs(a.x - cx) - mx)
+    const dy = Math.max(0, Math.abs(a.y - cy) - my)
+    const d = dx * dx + dy * dy
+    if (d === 0) return view // 画面上已经有内容，不用管
+    if (d < bestDist) {
+      bestDist = d
+      best = a
+    }
+  }
+
+  if (!best) return view
+  const mx = halfW + best.hw - padX
+  const my = halfH + best.hh - padY
+  const nx = clamp(cx, best.x - mx, best.x + mx)
+  const ny = clamp(cy, best.y - my, best.y + my)
+  return { x: size.w / 2 - nx * scale, y: size.h / 2 - ny * scale, scale }
+}
+
 export function CanvasWall({
   photos,
   counts,
@@ -77,10 +133,13 @@ export function CanvasWall({
   } | null>(null)
   const dragMoved = useRef(0)
   const capturedIds = useRef(new Set<number>())
+  const sizeRef = useRef(size)
+  const anchorsRef = useRef<Anchor[]>([{ x: 0, y: 0, hw: 170, hh: 220 }])
 
   const applyView = useCallback((next: View) => {
-    liveView.current = next
-    pendingView.current = next
+    const safe = constrainView(next, sizeRef.current, anchorsRef.current)
+    liveView.current = safe
+    pendingView.current = safe
     if (rafRef.current !== null) return
     rafRef.current = window.requestAnimationFrame(() => {
       rafRef.current = null
@@ -98,13 +157,28 @@ export function CanvasWall({
   )
 
   const placed = useMemo(() => layoutTimeline(photos), [photos])
+  const anchors = useMemo<Anchor[]>(() => {
+    // 相册本体 318×424 居中于原点，它永远是一个可停留的落点
+    const list: Anchor[] = [{ x: 0, y: 0, hw: 170, hh: 220 }]
+    for (const p of placed) list.push({ x: p.x, y: p.y, hw: p.w / 2, hh: p.h / 2 })
+    return list
+  }, [placed])
   const cover = useMemo(() => albumCover(photos), [photos])
   const featuredCount = useMemo(() => photos.filter((p) => p.featuredAt).length, [photos])
+
+  sizeRef.current = size
+  anchorsRef.current = anchors
 
   useEffect(() => {
     const el = shellRef.current
     if (!el) return
-    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight })
+    const measure = () => {
+      const w = el.clientWidth
+      const h = el.clientHeight
+      // 忽略瞬时 0 尺寸：否则可见区间塌缩，照片会被整批卸载
+      if (w < 1 || h < 1) return
+      setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }))
+    }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)

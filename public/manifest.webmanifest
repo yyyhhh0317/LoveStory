@@ -1,0 +1,19 @@
+{
+  "name": "yyyhhh",
+  "short_name": "yyyhhh",
+  "description": "我们的照片，摊在时间里。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F3EEE4",
+  "theme_color": "#F3EEE4",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

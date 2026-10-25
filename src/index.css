@@ -316,6 +316,18 @@ textarea {
   animation: album-in 1s var(--ease) 0.05s both;
 }
 
+/* 登场：画布第一次铺开时，书是「放上来」的（这条关键帧之前一直缺失，引用是空转） */
+@keyframes album-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* 落在纸面上的影子 */
 .album::before {
   content: '';
@@ -406,6 +418,84 @@ textarea {
 /* 触摸/点击时的下压反馈 */
 .album:active .album-cover {
   transform: translateY(-5px) translateZ(12px) rotateY(-5deg) rotateX(3deg);
+}
+
+/* ---------- 掀开封面 ---------- */
+/*
+ * 点开相册时把封面真的转开，而不是直接跳进沉浸视图。
+ * 旋转原点挪到书脊（左侧），转过去 104° 刚好越过边缘那一刻，
+ * backface-visibility: hidden 让它消失 —— 不做背面镜像，镜像出来的照片很脏。
+ * 内页同时轻轻前倾，形成「封面被掀起、纸页露出来」的层次差。
+ */
+.album.is-opening .album-cover {
+  transform-origin: 12% 50%;
+  transform: translateZ(30px) rotateY(-100deg);
+  backface-visibility: hidden;
+  transition: transform 0.5s cubic-bezier(0.4, 0.62, 0.24, 1), box-shadow 0.5s var(--ease);
+}
+
+.album.is-opening .album-pages {
+  transform: rotate(1.2deg) translateY(-5px) scale(1.012);
+  transition: transform 0.5s var(--ease);
+}
+
+/*
+ * 封面转开之后露出来的那一下，不该是页口那道细条纹（那是从侧面看才成立的细节），
+ * 而应该是一张干净的纸。所以叠一层纸面上去，封面转过 90° 左右时正好淡入。
+ */
+.album.is-opening .album-pages::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 3px 14px 14px 3px;
+  background: linear-gradient(
+    96deg,
+    color-mix(in srgb, var(--surface) 84%, var(--bg-deep)) 0%,
+    var(--surface) 24%,
+    color-mix(in srgb, var(--surface) 96%, var(--bg-deep)) 72%,
+    color-mix(in srgb, var(--surface) 86%, var(--bg-deep)) 100%
+  );
+  box-shadow: inset 18px 0 26px -20px rgba(var(--book-shade), 0.45),
+    inset 0 0 0 1px color-mix(in srgb, var(--bg-deep) 55%, transparent);
+  opacity: 0;
+  animation: page-reveal 0.32s var(--ease) 0.1s forwards;
+}
+
+@keyframes page-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+/* 掀开时有一道光扫过纸页 */
+.album.is-opening::after {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border-radius: 4px 14px 14px 4px;
+  background: linear-gradient(
+    102deg,
+    transparent 36%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 64%
+  );
+  opacity: 0;
+  pointer-events: none;
+  animation: page-sweep 0.52s var(--ease) 0.05s forwards;
+}
+
+@keyframes page-sweep {
+  0% {
+    opacity: 0;
+    transform: translateX(-9%);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(11%);
+  }
 }
 
 /* 书脊 */
@@ -669,6 +759,89 @@ textarea {
   transition: all 0.34s var(--ease);
 }
 
+/* ---------- 那年今日 ---------- */
+/*
+ * 一个可以忽略的提示：躺在画布底部，不盖住照片，也不抢焦点。
+ * 出现得晚一点（1.1s）、起得慢一点（0.9s），让它是「浮出来」而不是「弹出来」。
+ */
+.throwback {
+  position: fixed;
+  left: 50%;
+  bottom: 74px;
+  transform: translateX(-50%);
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /*
+   * 只有 left:50% 时可用宽度只有半屏，不写 max-content 会被挤成 195px，
+   * 「那年今日」就在手机上竖着折成两行了。
+   */
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 3px 4px 3px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 93%, transparent);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+  animation: throwback-in 0.9s var(--ease) 1.1s both;
+}
+
+@keyframes throwback-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.throwback-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  color: var(--ink);
+  transition: background-color 0.3s var(--ease);
+}
+
+.throwback-main:hover {
+  background: var(--surface-2);
+}
+
+.throwback-kicker {
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  letter-spacing: 0.12em;
+}
+
+.throwback-desc {
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.throwback-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: var(--ink-faint);
+  opacity: 0.7;
+  transition: opacity 0.25s var(--ease), background-color 0.25s var(--ease);
+}
+
+.throwback-close:hover {
+  opacity: 1;
+  background: var(--surface-2);
+}
+
 .recenter:hover {
   color: var(--ink);
   border-color: var(--line-strong);
@@ -868,6 +1041,31 @@ textarea {
   animation: img-in 0.55s var(--ease);
   user-select: none;
   -webkit-user-drag: none;
+}
+
+/*
+ * 相册模式的翻页：新的一页带着倾角从侧边翻进来。
+ * 方向由 --turn 决定（1 = 往后翻，从右边进；-1 = 往前翻，从左边进）。
+ * 只在相册模式用 —— 时间线浏览是「换一张」，不是「翻一页」，
+ * 处处翻书反而会把浏览节奏拖慢。
+ */
+.viewer-frame img.is-turn {
+  animation: page-turn 0.64s cubic-bezier(0.34, 0.08, 0.2, 1);
+}
+
+@keyframes page-turn {
+  from {
+    opacity: 0;
+    transform: perspective(1500px) rotateY(calc(var(--turn, 1) * -25deg))
+      translateX(calc(var(--turn, 1) * 62px)) scale(0.952);
+  }
+  62% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1500px) rotateY(0deg) translateX(0) scale(1);
+  }
 }
 
 @keyframes img-in {
@@ -1778,6 +1976,25 @@ textarea {
   .empty-hint {
     top: calc(50% + 110px);
     width: 280px;
+  }
+
+  .throwback {
+    bottom: 62px;
+    padding: 2px 3px 2px 5px;
+  }
+
+  .throwback-main {
+    height: 32px;
+    gap: 7px;
+    padding: 0 8px 0 6px;
+  }
+
+  .throwback-kicker {
+    font-size: 12px;
+  }
+
+  .throwback-desc {
+    font-size: 11px;
   }
 
   .status-card {

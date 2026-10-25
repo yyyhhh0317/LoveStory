@@ -22,6 +22,8 @@ interface Props {
   onDelete: (photo: Photo) => void
   messageCount: number
   onMessageCountChange: (delta: number) => void
+  /** 相册模式才翻书：新照片从侧面带着倾角翻进来，时间线浏览仍用原来的淡入 */
+  flip?: boolean
 }
 
 export function Viewer({
@@ -34,6 +36,7 @@ export function Viewer({
   onDelete,
   messageCount,
   onMessageCountChange,
+  flip = false,
 }: Props) {
   const photo = photos[index]
   const fullUrl = useImgUrl(photo?.storageKey ?? null, 'full')
@@ -45,6 +48,24 @@ export function Viewer({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [ambLum, setAmbLum] = useState<number | null>(null)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
+  /*
+   * 翻书方向。
+   *
+   * 不能用「index >= 上一次渲染的 index」这种每次渲染都重算的写法：
+   * 换照片时组件会因为别的原因（读亮度、取图片地址）再渲染一次，
+   * 那时 index 已经等于 prevIndex，方向会翻回 +1 —— 往前翻页的新一页
+   * 就会从右边飞进来。
+   *
+   * 改成只在 index 真的变化时算一次，并且存住。0 表示刚打开、
+   * 还没翻过：这时不播翻页动画，第一页是由封面掀开露出来的，不该再飞一次。
+   */
+  const lastIndex = useRef(index)
+  const turnRef = useRef(0)
+  if (index !== lastIndex.current) {
+    turnRef.current = index > lastIndex.current ? 1 : -1
+    lastIndex.current = index
+  }
+  const turn = turnRef.current
   const textRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -236,6 +257,10 @@ export function Viewer({
           >
             <img
               key={photo.id}
+              className={flip && turn !== 0 ? 'is-turn' : undefined}
+              style={
+                flip && turn !== 0 ? { ['--turn' as string]: String(turn) } : undefined
+              }
               src={fullUrl ?? thumbUrl ?? undefined}
               alt={photo.caption ?? ''}
               draggable={false}

@@ -4,17 +4,20 @@ import { Viewer } from './components/Viewer'
 import { UploadSheet } from './components/UploadSheet'
 import { ConnectFail, LoadingScreen } from './components/ScreenStates'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { PlusIcon } from './components/icons'
+import { BookIcon, CloseIcon, PlusIcon } from './components/icons'
 import { useAlbum } from './hooks/useAlbum'
 import { albumOrder, timelineOrder } from './lib/layout'
 import { formatDay } from './lib/format'
+import { findThrowback, todayKey } from './lib/throwback'
 import { isRemote } from './lib/repo'
 import type { NewPhotoInput, Photo } from './lib/types'
 
 type Theme = 'cream' | 'blush'
-type ViewMode = 'timeline' | 'album'
+type ViewMode = 'timeline' | 'album' | 'throwback'
 
 const THEME_KEY = 'yyyhhh:theme'
+/** 记住最近一次关掉「那年今日」的日期，同一天不再打扰 */
+const THROWBACK_KEY = 'yyyhhh:throwback'
 
 export default function App() {
   const album = useAlbum()
@@ -25,6 +28,10 @@ export default function App() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [viewer, setViewer] = useState<{ mode: ViewMode; photoId: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const dayKey = useMemo(() => todayKey(), [])
+  const [throwbackClosed, setThrowbackClosed] = useState(
+    () => localStorage.getItem(THROWBACK_KEY) === todayKey()
+  )
   const toastTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -43,8 +50,14 @@ export default function App() {
 
   const timeline = useMemo(() => timelineOrder(album.photos), [album.photos])
   const featured = useMemo(() => albumOrder(album.photos), [album.photos])
+  const throwback = useMemo(() => findThrowback(album.photos), [album.photos])
 
-  const sequence = viewer?.mode === 'album' ? featured : timeline
+  const sequence =
+    viewer?.mode === 'album'
+      ? featured
+      : viewer?.mode === 'throwback'
+        ? (throwback?.photos ?? [])
+        : timeline
   const index = viewer ? Math.max(0, sequence.findIndex((p) => p.id === viewer.photoId)) : 0
 
   useEffect(() => {
@@ -60,6 +73,16 @@ export default function App() {
       return
     }
     setViewer({ mode: 'album', photoId: featured[0].id })
+  }
+
+  const openThrowback = () => {
+    if (!throwback) return
+    setViewer({ mode: 'throwback', photoId: throwback.photos[0].id })
+  }
+
+  const dismissThrowback = () => {
+    setThrowbackClosed(true)
+    localStorage.setItem(THROWBACK_KEY, dayKey)
   }
 
   const changeIndex = (next: number) => {
@@ -212,6 +235,7 @@ export default function App() {
             onToggleFeatured={(p) => void toggleFeatured(p)}
             onSaveCaption={saveCaption}
             onDelete={(p) => void deletePhoto(p)}
+            flip={viewer.mode === 'album'}
             messageCount={album.counts[sequence[index]?.id ?? ''] ?? 0}
             onMessageCountChange={(delta) => {
               const id = sequence[index]?.id
@@ -219,6 +243,27 @@ export default function App() {
             }}
           />
         </ErrorBoundary>
+      )}
+
+      {album.phase === 'ready' && throwback && !throwbackClosed && (
+        <div className="throwback">
+          <button type="button" className="throwback-main" onClick={openThrowback}>
+            <BookIcon size={14} />
+            <span className="throwback-kicker">那年今日</span>
+            <span className="throwback-desc">
+              {throwback.label} · {throwback.photos.length} 张
+            </span>
+          </button>
+          <button
+            type="button"
+            className="throwback-close"
+            onClick={dismissThrowback}
+            aria-label="今天不再提示"
+            title="今天不再提示"
+          >
+            <CloseIcon size={12} />
+          </button>
+        </div>
       )}
 
       <UploadSheet

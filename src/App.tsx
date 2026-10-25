@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasWall } from './components/CanvasWall'
 import { Viewer } from './components/Viewer'
 import { UploadSheet } from './components/UploadSheet'
+import { ConnectFail, LoadingScreen } from './components/ScreenStates'
 import { PlusIcon } from './components/icons'
 import { useAlbum } from './hooks/useAlbum'
 import { albumOrder, timelineOrder } from './lib/layout'
@@ -85,23 +86,41 @@ export default function App() {
   }
 
   const subtitle = useMemo(() => {
+    if (album.phase === 'loading') return '正在翻开…'
+    if (album.phase === 'error') return '暂时连不上'
     if (!album.photos.length) return '还没有照片'
     const first = timeline[0]
     return `${album.photos.length} 张 · 从 ${formatDay(first.takenAt)} 起`
-  }, [album.photos.length, timeline])
+  }, [album.phase, album.photos.length, timeline])
 
   return (
     <>
       <div className="grain" />
 
-      <CanvasWall
-        photos={album.photos}
-        counts={album.counts}
-        localOnly={!isRemote}
-        onOpenPhoto={openPhoto}
-        onOpenAlbum={openAlbum}
-        onRequestUpload={() => setUploadOpen(true)}
-      />
+      {album.phase === 'loading' && <LoadingScreen />}
+
+      {album.phase === 'error' && (
+        <ConnectFail
+          error={album.error}
+          retrying={album.refreshing}
+          onRetry={() => void album.reload()}
+        />
+      )}
+
+      {/*
+        只有 ready 才挂画布：加载中或连不上时若把画布挂上，
+        它会先渲染出自己的空态「还什么都没有」，正是要消灭的错觉。
+      */}
+      {album.phase === 'ready' && (
+        <CanvasWall
+          photos={album.photos}
+          counts={album.counts}
+          localOnly={!isRemote}
+          onOpenPhoto={openPhoto}
+          onOpenAlbum={openAlbum}
+          onRequestUpload={() => setUploadOpen(true)}
+        />
+      )}
 
       <header className="topbar">
         <div className="brand">
@@ -134,7 +153,12 @@ export default function App() {
               粉彩
             </button>
           </div>
-          <button type="button" className="solid-btn" onClick={() => setUploadOpen(true)}>
+          <button
+            type="button"
+            className="solid-btn"
+            onClick={() => setUploadOpen(true)}
+            disabled={album.phase !== 'ready'}
+          >
             <PlusIcon size={15} />
             放照片
           </button>

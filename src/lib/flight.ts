@@ -29,3 +29,9 @@ export function prefersReducedMotion(): boolean {
  * 稍长一点、末端慢慢收，才读得出「它在飞」而不是「它被甩过去」。
  */
 export const FLIGHT_MS = 520
+
+/**
+ * 珍藏册翻页时长，只由 JS 控制锁定的窗口；
+ * 关键帧那边（leaf-fwd / leaf-back）必须和它保持 0.9s 对齐。
+ */
+export const FLIP_MS = 900

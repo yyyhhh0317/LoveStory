@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasWall } from './components/CanvasWall'
 import { Viewer } from './components/Viewer'
 import { UploadSheet } from './components/UploadSheet'
@@ -45,11 +45,11 @@ export default function App() {
   }, [theme])
 
   /** 失败提示比成功提示多留一会儿，因为要看清的是「需要再做什么」 */
-  const say = (text: string, ms = 2600) => {
+  const say = useCallback((text: string, ms = 2600) => {
     setToast(text)
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
     toastTimer.current = window.setTimeout(() => setToast(null), ms)
-  }
+  }, [])
 
   const timeline = useMemo(() => timelineOrder(album.photos), [album.photos])
   const featured = useMemo(() => albumOrder(album.photos), [album.photos])
@@ -67,25 +67,34 @@ export default function App() {
     if (viewer && sequence.length === 0) setViewer(null)
   }, [viewer, sequence.length])
 
-  const openPhoto = (photo: Photo, rect: DOMRect | null = null) => {
+  /*
+   * 这两个回调必须引用稳定。
+   * 它们直接进 PhotoCard 的 props，而 PhotoCard 是靠 memo 免于重渲染的 ——
+   * 每次 App 重渲染（弹一条 toast、切主题）都换一个新函数的话，
+   * 同屏三十几张卡片会全部重渲染一遍，正好落在「动画进行中」的那些帧上。
+   */
+  const openPhoto = useCallback((photo: Photo, rect: DOMRect | null = null) => {
     setOrigin(toFrameRect(rect))
     setViewer({ mode: 'timeline', photoId: photo.id })
-  }
+  }, [])
 
   /*
    * photoId 是内页上那张（相册第一张）。按 id 找而不是直接取 featured[0] ——
    * 万一它在这半秒里被取消了星标，也不会从 A 飞到 B。
    */
-  const openAlbum = (photoId: string | null = null, rect: DOMRect | null = null) => {
-    if (!featured.length) {
-      // 星标只在详情页右上角，画布上没有。提示得指对地方，否则人会去画布上找
-      say('相册还空着 · 点开照片，右上角星标收进来')
-      return
-    }
-    const start = featured.find((p) => p.id === photoId) ?? featured[0]
-    setOrigin(toFrameRect(rect))
-    setViewer({ mode: 'album', photoId: start.id })
-  }
+  const openAlbum = useCallback(
+    (photoId: string | null = null, rect: DOMRect | null = null) => {
+      if (!featured.length) {
+        // 星标只在详情页右上角，画布上没有。提示得指对地方，否则人会去画布上找
+        say('相册还空着 · 点开照片，右上角星标收进来')
+        return
+      }
+      const start = featured.find((p) => p.id === photoId) ?? featured[0]
+      setOrigin(toFrameRect(rect))
+      setViewer({ mode: 'album', photoId: start.id })
+    },
+    [featured, say]
+  )
 
   const openThrowback = () => {
     if (!throwback) return

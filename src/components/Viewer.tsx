@@ -1,6 +1,7 @@
 import { useLayoutEffect, useEffect, useRef, useState } from 'react'
 import { useImgUrl } from '../hooks/useImgUrl'
 import { repo } from '../lib/repo'
+import { preloadImage, whenIdle } from '../lib/preload'
 import { formatDayCn } from '../lib/format'
 import type { Photo, ImageVariant } from '../lib/types'
 import { FLIP_MS, prefersReducedMotion, type FrameRect } from '../lib/flight'
@@ -36,6 +37,13 @@ const PAGE_AR = 3 / 4
 /** 照片离纸边的留白比例：左右 6%、上下 5% —— CSS 的 .book-hole 必须与之同步 */
 const HOLE_X = 0.06
 const HOLE_Y = 0.05
+
+/**
+ * 平均亮度的记忆表。
+ * 取像素要发一次 CORS 请求，它和 <img> 那次**不进同一个缓存**（响应头带 Vary: Origin），
+ * 所以来回翻同一张会重复下载。按地址记住结果，翻回去就不用再算。
+ */
+const lumCache = new Map<string, number>()
 
 /** 在一个框里放下整页纸（contain 居中），坐标相对框 */
 function pageFit(box: { width: number; height: number }): FrameRect {
@@ -83,6 +91,17 @@ export function Viewer({
   const [imgReady, setImgReady] = useState(false)
   /* 氛围层挂载开关：刻意错开落地那一帧（见下方 effect） */
   const [ambienceOn, setAmbienceOn] = useState(!flew)
+  /*
+   * 氛围层用两个常驻槽位轮流承接，靠透明度交叉淡入淡出。
+   *
+   * 原来是 key={photo.id} 重挂：每换一张就新建一块 1800×1800 的模糊合成层，
+   * 新分配图层要几十毫秒 —— 正好撞在翻页那一帧上，这就是「切一张卡一下」。
+   * 两个槽位常驻之后，图层只分配一次，换图只是改背景 + 一次便宜的淡入。
+   */
+  const [amb, setAmb] = useState<{ slots: [string | null, string | null]; front: number }>({
+    slots: [null, null],
+    front: 0,
+  })
   const imgRef = useRef<HTMLImageElement>(null)
   /**
    * 翻页状态（相册模式的真·翻书）。
@@ -132,10 +151,21 @@ export function Viewer({
    * 读一下这张照片的平均亮度，用来给氛围层定亮度。
    * 不分照片一律提亮的话：白墙/雪景会把背景冲成浅灰，深色夜景又黑得发闷。
    * 缩略图走 Supabase 公开桶，带 Access-Control-Allow-Origin: *，可以安全读像素。
+   *
+   * 算过的记在 lumCache 里：这张请求带 crossOrigin，和 <img> 那次不是同一个缓存条目，
+   * 不记的话来回翻同一张会反复下载。
    */
   useEffect(() => {
+    if (!thumbUrl) {
+      setAmbLum(null)
+      return
+    }
+    const known = lumCache.get(thumbUrl)
+    if (known !== undefined) {
+      setAmbLum(known)
+      return
+    }
     setAmbLum(null)
-    if (!thumbUrl) return
     let alive = true
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -155,7 +185,11 @@ export function Viewer({
             (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255
           count++
         }
-        if (alive && count > 0) setAmbLum(sum / count)
+        if (count > 0) {
+          const lum = sum / count
+          lumCache.set(thumbUrl, lum)
+          if (alive) setAmbLum(lum)
+        }
       } catch {
         /* 画布被污染就退回默认亮度 */
       }
@@ -165,6 +199,60 @@ export function Viewer({
       alive = false
     }
   }, [thumbUrl])
+
+  /*
+   * 预取前后各两张。
+   *
+   * 换照片卡的不是「请求慢」，而是**解码**：一张 1800px 的 WebP 在主线程解要
+   * 60–180ms，而它偏偏发生在翻页动画的第一帧。提前 decode() 掉，翻过去就只剩合成。
+   * 顺序上先紧后松：下一张马上要，再远的两张等浏览器空闲，别抢当前这张的带宽。
+   */
+  useEffect(() => {
+    if (!photos.length) return
+    let alive = true
+    const targets: Photo[] = []
+    // 只铺三张：下一张、上一张、再下一张。铺太多会在慢网上把当前这张的带宽挤掉
+    for (const d of [1, -1, 2]) {
+      const p = photos[index + d]
+      if (p?.storageKey) targets.push(p)
+    }
+    if (!targets.length) return
+
+    const run = async () => {
+      for (let i = 0; i < targets.length; i++) {
+        if (!alive) return
+        /*
+         * 只等「让一步」，不等「下载完」。
+         * 原来写的是 await preloadImage(...)：一张 1800px 的大图在慢网下要好几秒，
+         * 于是第二、第三张的请求要等第一张解码完才发出去 —— 队列被自己堵死，
+         * 真正翻到第三张时它才刚起步。
+         */
+        if (i > 0) await whenIdle()
+        if (!alive) return
+        const key = targets[i].storageKey
+        // Supabase 是同步拼 URL；本地模式要等 IndexedDB 读出来
+        const url = repo.peekUrl(key, 'full') ?? (await repo.resolveUrl(key, 'full'))
+        if (!alive || !url) continue
+        void preloadImage(url, 'low')
+      }
+    }
+    void run()
+    return () => {
+      alive = false
+    }
+  }, [index, photos])
+
+  /* 换到新的一张：把它放进空闲的那个槽位，旧的留着淡出 */
+  useEffect(() => {
+    if (!thumbUrl || !ambienceOn) return
+    setAmb((prev) => {
+      if (prev.slots[prev.front] === thumbUrl) return prev
+      const back = prev.front === 0 ? 1 : 0
+      const slots: [string | null, string | null] = [prev.slots[0], prev.slots[1]]
+      slots[back] = thumbUrl
+      return { slots, front: back }
+    })
+  }, [thumbUrl, ambienceOn])
 
   /*
    * 纸页矩形：相册模式里照片贴在一张统一 3:4 的纸页上，
@@ -459,7 +547,10 @@ export function Viewer({
   const pageStyle = (r: FrameRect) => ({ left: r.x, top: r.y, width: r.w, height: r.h })
 
   return (
-    <div className={`viewer${flew ? ' is-flight' : ''}`}>
+    <div
+      className={`viewer${flew ? ' is-flight' : ''}`}
+      style={{ ['--amb-b' as string]: String(ambBrightness) }}
+    >
       {/*
         底色层。
         飞行时画布还亮着，若直接让 .viewer 淡入，画布顶栏会和详情页标题
@@ -473,23 +564,24 @@ export function Viewer({
       {/*
         氛围层：拿当前照片自己做底。缩到很小再放大，靠插值得到柔焦，
         比直接对全屏元素做大半径 blur 便宜得多（小尺寸只光栅一次）。
-        每换一张照片它就整体淡入一次，跟着照片的色调走。
+        每换一张照片，新的一张从背面槽位淡入，旧的淡出 —— 交叉溶解，
+        既不闪白也不重建合成层。
 
-        飞行期间**不渲染**：它是一块 2300×2300 的合成层，新分配图层要几十毫秒，
+        飞行期间**不渲染**：它是一块 1800×1800 的合成层，新分配图层要几十毫秒，
         正好和飞行层的首帧撞在一起，就是那下卡顿。等照片落地再挂上，
         它本来也是慢慢淡入的，看不出是后来的。
       */}
-      {thumbUrl && ambienceOn && (
-        <div
-          key={photo.id}
-          className="viewer-ambience"
-          style={{
-            backgroundImage: `url("${thumbUrl}")`,
-            ['--amb-b' as string]: String(ambBrightness),
-          }}
-          aria-hidden="true"
-        />
-      )}
+      {ambienceOn &&
+        amb.slots.map((src, i) =>
+          src ? (
+            <div
+              key={i}
+              className={`viewer-ambience${amb.front === i ? ' is-front' : ''}`}
+              style={{ backgroundImage: `url("${src}")` }}
+              aria-hidden="true"
+            />
+          ) : null
+        )}
       <div className="viewer-veil" aria-hidden="true" />
 
       <div className="viewer-head">
@@ -568,6 +660,8 @@ export function Viewer({
               ref={imgRef}
               key={photo.id}
               onLoad={() => setImgReady(true)}
+              decoding="async"
+              fetchPriority="high"
               className={
                 flip && !isFirstShot
                   ? turn?.dir === -1

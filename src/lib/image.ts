@@ -1,5 +1,18 @@
-const THUMB_EDGE = 720
-const FULL_EDGE = 2048
+/*
+ * 两档尺寸的取舍（2026-10-26 按实测显示尺寸重定）：
+ *
+ * 缩略图：画布上最宽也只有 250 世界单位 × 0.62 初始缩放 ≈ 155 CSS px，
+ *   放大到 1.0 也就 250px。原来存 720px 边，等于多传 2~4 倍的像素 ——
+ *   首屏三十几张同时下载，慢网下就是「要等一会儿才长出来」。
+ *   560px 在 2.5 倍放大内都看不出糊，字节数只剩原来的 60%。
+ *
+ * 大图：详情页最长边按视口算，1280×820 的窗口最多 820 CSS px，
+ *   2 倍屏 1640px 已经够，2048 是白给。1800 + q82 比 2048 + q86 小 ~45%。
+ */
+const THUMB_EDGE = 560
+const THUMB_QUALITY = 0.8
+const FULL_EDGE = 1800
+const FULL_QUALITY = 0.82
 
 export interface ProcessedImage {
   thumb: Blob
@@ -128,28 +141,55 @@ async function toBlob(source: Drawable, maxEdge: number, quality: number): Promi
   const webp = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, 'image/webp', quality)
   )
+  /*
+   * 画完立刻把画布退回 0×0：canvas 的后备位图要等 GC 才释放，
+   * 连续处理十几张时峰值内存会叠到几百 MB，上传面板直接卡死。
+   */
+  canvas.width = 0
+  canvas.height = 0
+
   if (webp && webp.size > 0) return webp
 
+  // WebP 编码失败才退 JPEG，此时要重画一遍（画布已经释放了）
+  const fallback = document.createElement('canvas')
+  fallback.width = tw
+  fallback.height = th
+  const fctx = fallback.getContext('2d')
+  if (!fctx) throw new Error('图片压缩失败')
+  fctx.imageSmoothingQuality = 'high'
+  fctx.drawImage(source as CanvasImageSource, 0, 0, tw, th)
   const jpeg = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, 'image/jpeg', quality)
+    fallback.toBlob(resolve, 'image/jpeg', quality)
   )
+  fallback.width = 0
+  fallback.height = 0
   if (!jpeg) throw new Error('图片压缩失败')
   return jpeg
 }
 
+/** 让出一帧，进度数字才来得及画出来（解码/编码都是主线程大块任务） */
+const nextFrame = () =>
+  new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve())
+    else window.setTimeout(resolve, 0)
+  })
+
 /**
  * 上传前的处理：压两档（画布用缩略图、详情页用大图），并读出拍摄时间。
  * 原图不入库——为的是让 1GB 的空间能装下好几年的照片。
+ *
+ * 两档串行而不是 Promise.all：并行会让两块画布同时存在，
+ * 一张 12MP 的照片要多占 ~40MB，手机上传十来张就有概率被系统杀掉标签页。
+ * 串行多花的时间是编码，反正也是主线程在等，不差这一点。
  */
 export async function processImage(file: File): Promise<ProcessedImage> {
   const [drawable, exifDate] = await Promise.all([decode(file), readExifDate(file)])
   const { w, h } = sizeOf(drawable)
   if (!w || !h) throw new Error('图片尺寸异常')
 
-  const [thumb, full] = await Promise.all([
-    toBlob(drawable, THUMB_EDGE, 0.86),
-    toBlob(drawable, FULL_EDGE, 0.86),
-  ])
+  const full = await toBlob(drawable, FULL_EDGE, FULL_QUALITY)
+  await nextFrame()
+  const thumb = await toBlob(drawable, THUMB_EDGE, THUMB_QUALITY)
 
   if ('close' in drawable && typeof drawable.close === 'function') drawable.close()
 

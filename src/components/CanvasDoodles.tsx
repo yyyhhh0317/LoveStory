@@ -370,9 +370,23 @@ function computeDoodles(view: View, size: { w: number; h: number }): Doodle[] {
 }
 
 export function CanvasDoodles({ view, size }: { view: View; size: { w: number; h: number } }) {
+  /*
+   * 分桶之后再算。
+   *
+   * 涂鸦是钉在世界坐标上的（位置只由格子的 hash 决定），视口挪一点点
+   * 并不需要换一批 —— 只有跨过桶边界时才真的多了/少了某一格。
+   * 不分桶的话，画布每重渲染一次就要重跑一遍 computeDoodles 并 diff 十来个 SVG，
+   * 这是平移掉帧的主要来源之一。
+   *
+   * 桶宽 160 世界单位 < computeDoodles 里 320 的留边，
+   * 所以换批永远发生在视口之外，看不到。
+   */
+  const qx = Math.round(view.x / 160) * 160
+  const qy = Math.round(view.y / 160) * 160
+  const qs = Math.round(view.scale * 20) / 20
   const doodles = useMemo(
-    () => computeDoodles(view, size),
-    [view.x, view.y, view.scale, size.w, size.h]
+    () => computeDoodles({ x: qx, y: qy, scale: qs }, size),
+    [qx, qy, qs, size.w, size.h]
   )
 
   return (

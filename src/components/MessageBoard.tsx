@@ -13,6 +13,12 @@ interface Props {
 
 const MAX_LEN = 300
 
+/**
+ * 宽屏（≥901px）时这块面板是常驻的一列，窄屏才靠 .open 当抽屉拉出来。
+ * 判断「用户看不看得见」必须把两种形态都算上，只看 open 会让桌面端永远读不到留言。
+ */
+const WIDE = '(min-width: 901px)'
+
 export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
@@ -22,10 +28,31 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
   const [loadFailed, setLoadFailed] = useState(false)
   const [retryKey, setRetryKey] = useState(0)
   const [sendFailed, setSendFailed] = useState(false)
+  const [wide, setWide] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(WIDE).matches
+  )
   const areaRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    const mq = window.matchMedia(WIDE)
+    const on = () => setWide(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+
+  const visible = wide || open
+
+  useEffect(() => {
+    /*
+     * 只在用户看得见的时候读。
+     *
+     * 这块面板原来跟着 photoId 走 —— 在详情页每翻一张就安静地发一次请求，
+     * 远端的每一条往返都在抢换图那几百毫秒的带宽。
+     * 窄屏收起时它压根不显示，没有理由去读。
+     */
+    if (!visible) return
     let alive = true
     setLoading(true)
     setLoadFailed(false)
@@ -45,7 +72,7 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
     return () => {
       alive = false
     }
-  }, [photoId, retryKey])
+  }, [photoId, retryKey, visible])
 
   const submit = async () => {
     const content = draft.trim()

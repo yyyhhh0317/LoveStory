@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Photo } from '../lib/types'
-import { albumOrder, layoutTimeline } from '../lib/layout'
+import { albumOrder, layoutTimeline, type Placed } from '../lib/layout'
 import { PhotoCard } from './PhotoCard'
 import { AlbumBook } from './AlbumBook'
 import { CanvasDoodles } from './CanvasDoodles'
@@ -9,11 +9,43 @@ import { PlusIcon, TargetIcon } from './icons'
 const MIN_SCALE = 0.16
 const MAX_SCALE = 2.4
 const DRAG_TOLERANCE = 6
-/** 视口外多渲染一圈的余量（世界单位），越小越省，但快速平移时更容易看到空档 */
-const VIEW_PADDING = 220
-/** 放大到这个倍率换高清图，缩回要跌破 RETINA_OFF 才降级，避免在阈值上反复横跳 */
-const RETINA_ON = 1.0
-const RETINA_OFF = 0.82
+/**
+ * 视口外多渲染一圈的余量。单位是**屏幕像素**（换算成世界单位时除以 scale），
+ * 原来写的是世界单位 220，缩到 0.16 倍时只剩 35px，快速平移时照片是「追进来」的。
+ */
+const VIEW_PADDING = 260
+/**
+ * 同屏卡片上限。缩到最小倍率时，螺旋半径几千世界单位内的照片全都「可见」，
+ * 真按可见集渲染会一次挂上六七百个 <img> —— 那是必卡无疑。
+ * 超量时只留离视口中心最近的一批。
+ */
+const MAX_CARDS = 240
+
+/** 画布上单张卡片的最长边（含相纸白边），和 layout.ts 的 MAX_EDGE + FRAME 对齐 */
+const CARD_EDGE = 262
+/** 缩略图的最长边，和 lib/image.ts 的 THUMB_EDGE 对齐 */
+const THUMB_EDGE = 560
+/** 缩略图被放大到这个倍数以内还不换高清 —— 再往上就真的能看出糊了 */
+const THUMB_TOLERANCE = 1.8
+
+const DPR = Math.min(window.devicePixelRatio || 1, 3)
+/**
+ * 换高清的倍率阈值：直到「卡片实际需要的设备像素」超过缩略图能提供的像素，
+ * 才值得去拉那张 1800px 的大图。
+ *
+ *   262(世界单位) × scale × DPR > 560 × 1.8
+ *
+ * 原来是写死 1.0 —— 意味着放大到 100% 就把同屏三十几张全部换成大图，
+ * 30 × 1800² 解码后约 290MB，正是手机上「放大一下就卡住」的来源。
+ * 按这个式子，2 倍屏要到 1.92 倍才换，3 倍屏 1.28 倍，桌面 1 倍屏干脆不换。
+ */
+const HI_ON = Math.max(
+  1.15,
+  Math.min(2.2, (THUMB_EDGE * THUMB_TOLERANCE) / (CARD_EDGE * DPR))
+)
+const HI_OFF = HI_ON * 0.86
+
+const WORLD_EASE = 'transform 0.68s cubic-bezier(0.22, 1, 0.36, 1)'
 
 interface View {
   x: number
@@ -31,6 +63,8 @@ interface Props {
 }
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
+
+const transformOf = (v: View) => `translate3d(${v.x}px, ${v.y}px, 0) scale(${v.scale})`
 
 function zoomAt(view: View, mx: number, my: number, factor: number): View {
   const scale = clamp(view.scale * factor, MIN_SCALE, MAX_SCALE)
@@ -96,6 +130,34 @@ function constrainView(
   return { x: size.w / 2 - nx * scale, y: size.h / 2 - ny * scale, scale }
 }
 
+/** 当前视口里该渲染哪些照片（纯函数，rAF 和渲染两处共用同一套口径） */
+function computeVisible(
+  placed: Placed[],
+  view: View,
+  size: { w: number; h: number },
+  cap = MAX_CARDS,
+  padPx = VIEW_PADDING
+): Placed[] {
+  const padWorld = padPx / view.scale
+  const halfW = size.w / (2 * view.scale) + padWorld
+  const halfH = size.h / (2 * view.scale) + padWorld
+  const cx = (size.w / 2 - view.x) / view.scale
+  const cy = (size.h / 2 - view.y) / view.scale
+
+  const hits: Placed[] = []
+  for (const p of placed) {
+    if (Math.abs(p.x - cx) < halfW + p.w / 2 && Math.abs(p.y - cy) < halfH + p.h / 2) {
+      hits.push(p)
+    }
+  }
+  if (hits.length <= cap) return hits
+
+  // 极端缩小时同屏可能上千张：只留离视口中心最近的 cap 张
+  const scored = hits.map((p) => ({ p, d: (p.x - cx) ** 2 + (p.y - cy) ** 2 }))
+  scored.sort((a, b) => a.d - b.d)
+  return scored.slice(0, cap).map((s) => s.p)
+}
+
 export function CanvasWall({
   photos,
   counts,
@@ -105,6 +167,7 @@ export function CanvasWall({
   onRequestUpload,
 }: Props) {
   const shellRef = useRef<HTMLDivElement>(null)
+  const worldRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
   const [view, setView] = useState<View>(() => ({
     x: window.innerWidth / 2,
@@ -117,10 +180,22 @@ export function CanvasWall({
   const [settled, setSettled] = useState(false)
   const [hiRes, setHiRes] = useState(false)
 
-  /* 权威视图：每次输入立即更新，React 状态每帧最多同步一次 */
+  /*
+   * 权威视图：每次输入立即更新，React 状态只在「需要重渲染的东西变了」时才同步。
+   *
+   * 这是这一版最重要的改动。原来每次 pointermove / wheel 都 setView，
+   * 于是每一帧都要重跑 CanvasWall 的整棵子树：
+   *   可见集 filter（O(n)）+ 十几株涂鸦 SVG 的重新生成与 diff。
+   * 手机上这一套大约 8–20ms，平移必然掉帧。
+   * 现在平移只是往 DOM 上写一个 transform（合成层），React 一次都不跑。
+   */
   const liveView = useRef<View>(view)
   const rafRef = useRef<number | null>(null)
   const pendingView = useRef<View | null>(null)
+  const visibleIdsRef = useRef<string[]>([])
+  const bucketRef = useRef('')
+  const hiResRef = useRef(false)
+  const animatingRef = useRef(false)
 
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const panStart = useRef<{ px: number; py: number; vx: number; vy: number } | null>(null)
@@ -135,27 +210,8 @@ export function CanvasWall({
   const dragMoved = useRef(0)
   const capturedIds = useRef(new Set<number>())
   const sizeRef = useRef(size)
+  const placedRef = useRef<Placed[]>([])
   const anchorsRef = useRef<Anchor[]>([{ x: 0, y: 0, hw: 170, hh: 220 }])
-
-  const applyView = useCallback((next: View) => {
-    const safe = constrainView(next, sizeRef.current, anchorsRef.current)
-    liveView.current = safe
-    pendingView.current = safe
-    if (rafRef.current !== null) return
-    rafRef.current = window.requestAnimationFrame(() => {
-      rafRef.current = null
-      const v = pendingView.current
-      pendingView.current = null
-      if (v) setView(v)
-    })
-  }, [])
-
-  useEffect(
-    () => () => {
-      if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current)
-    },
-    []
-  )
 
   const placed = useMemo(() => layoutTimeline(photos), [photos])
   const anchors = useMemo<Anchor[]>(() => {
@@ -173,6 +229,94 @@ export function CanvasWall({
 
   sizeRef.current = size
   anchorsRef.current = anchors
+  placedRef.current = placed
+
+  /**
+   * 一帧只做一次：把权威视图落到 DOM 上，然后判断「结构性渲染」需不需要跟上。
+   */
+  const flushView = useCallback(() => {
+    rafRef.current = null
+    const v = pendingView.current
+    pendingView.current = null
+    if (!v) return
+
+    const el = worldRef.current
+    if (el) el.style.transform = transformOf(v)
+
+    // 高清档：只在跨过阈值时 setState，缩放过程中不产生额外渲染
+    if (!hiResRef.current && v.scale >= HI_ON) {
+      hiResRef.current = true
+      setHiRes(true)
+    } else if (hiResRef.current && v.scale <= HI_OFF) {
+      hiResRef.current = false
+      setHiRes(false)
+    }
+
+    /*
+     * 只有这两件事变了才值得让 React 跑一遍：
+     *   1. 可见集变了（要挂载/卸载卡片）
+     *   2. 涂鸦的分桶变了（要换一批背景涂鸦）
+     * 涂鸦按 160 世界单位分桶 —— 它们本身钉在世界坐标上不移动，
+     * 换一批的时机晚半拍，肉眼只会在视口边缘之外发生。
+     */
+    const vis = computeVisible(placedRef.current, v, sizeRef.current)
+    const prevIds = visibleIdsRef.current
+    let same = prevIds.length === vis.length
+    if (same) {
+      for (let i = 0; i < vis.length; i++) {
+        if (prevIds[i] !== vis[i].photo.id) {
+          same = false
+          break
+        }
+      }
+    }
+    const bucket = `${Math.round(v.x / 160)}|${Math.round(v.y / 160)}|${Math.round(v.scale * 20)}`
+    const bucketChanged = bucket !== bucketRef.current
+
+    if (!same || bucketChanged) {
+      visibleIdsRef.current = vis.map((p) => p.photo.id)
+      bucketRef.current = bucket
+      setView(v)
+    }
+  }, [])
+
+  const applyView = useCallback(
+    (next: View) => {
+      const safe = constrainView(next, sizeRef.current, anchorsRef.current)
+      liveView.current = safe
+      pendingView.current = safe
+      if (rafRef.current === null) rafRef.current = window.requestAnimationFrame(flushView)
+    },
+    [flushView]
+  )
+
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current)
+    },
+    []
+  )
+
+  /** 手动拖拽会打断 recenter 的过渡，否则 transform 会被 transition 拖着走 */
+  const stopTransition = useCallback(() => {
+    const el = worldRef.current
+    if (!el || !animatingRef.current) return
+    /*
+     * 打断过渡时不能直接把它按回去 —— 那样画布会「啪」地跳到终点。
+     * 先读当前生效的矩阵，把权威视图对齐到「眼睛看到的位置」，再接着拖。
+     */
+    try {
+      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform)
+      if (Number.isFinite(m.a) && m.a > 0) {
+        liveView.current = { x: m.m41, y: m.m42, scale: m.a }
+      }
+    } catch {
+      /* 老内核没有 DOMMatrixReadOnly：退回「按终点继续」 */
+    }
+    animatingRef.current = false
+    setAnimating(false)
+    el.style.transition = 'none'
+  }, [])
 
   useEffect(() => {
     const el = shellRef.current
@@ -190,11 +334,15 @@ export function CanvasWall({
     return () => ro.disconnect()
   }, [])
 
-  /* 放大时换高清图 —— 这是「照片不清楚」的解 */
+  /* 首帧之后把 transform / 可见集基线落到 DOM，后续只做增量比较 */
   useEffect(() => {
-    if (!hiRes && view.scale >= RETINA_ON) setHiRes(true)
-    else if (hiRes && view.scale <= RETINA_OFF) setHiRes(false)
-  }, [view.scale, hiRes])
+    if (worldRef.current) worldRef.current.style.transform = transformOf(liveView.current)
+    const seed = computeVisible(placedRef.current, liveView.current, sizeRef.current)
+    visibleIdsRef.current = seed.map((p) => p.photo.id)
+    bucketRef.current = `${Math.round(liveView.current.x / 160)}|${Math.round(
+      liveView.current.y / 160
+    )}|${Math.round(liveView.current.scale * 20)}`
+  }, [])
 
   useEffect(() => {
     const el = shellRef.current
@@ -202,6 +350,7 @@ export function CanvasWall({
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       setSettled(true)
+      stopTransition()
       const rect = el.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
@@ -209,12 +358,13 @@ export function CanvasWall({
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [applyView])
+  }, [applyView, stopTransition])
 
   const handlePointerDown = (e: React.PointerEvent) => {
     const el = shellRef.current
     if (!el) return
     setSettled(true)
+    stopTransition()
     /*
      * 这里故意不 capture：setPointerCapture 会把后续的 pointerup / click
      * 都重定向到画布容器，卡片自己的 onClick 就再也收不到事件了。
@@ -314,24 +464,32 @@ export function CanvasWall({
   }
 
   const recenter = useCallback(() => {
+    const box = sizeRef.current
+    animatingRef.current = true
     setAnimating(true)
     applyView({
-      x: size.w / 2,
-      y: size.h / 2,
-      scale: size.w < 720 ? 0.42 : 0.62,
+      x: box.w / 2,
+      y: box.h / 2,
+      scale: box.w < 720 ? 0.42 : 0.62,
     })
-    window.setTimeout(() => setAnimating(false), 680)
-  }, [size, applyView])
+    window.setTimeout(() => {
+      animatingRef.current = false
+      setAnimating(false)
+    }, 680)
+  }, [applyView])
 
   const guard = useCallback(() => dragMoved.current > DRAG_TOLERANCE, [])
 
-  const visible = useMemo(() => {
-    const halfW = size.w / (2 * view.scale) + VIEW_PADDING
-    const halfH = size.h / (2 * view.scale) + VIEW_PADDING
-    const cx = (size.w / 2 - view.x) / view.scale
-    const cy = (size.h / 2 - view.y) / view.scale
-    return placed.filter((p) => Math.abs(p.x - cx) < halfW && Math.abs(p.y - cy) < halfH)
-  }, [placed, view, size])
+  const visible = useMemo(() => computeVisible(placed, view, size), [placed, view, size])
+  /*
+   * 真正落在视口里的那批（不带留边）。
+   * 它们先占带宽，留边上的那圈降级成 low —— 否则 40 张缩略图平分 6 条连接，
+   * 正中间那张要等到很后面才开始下载，看起来就是「半天不出图」。
+   */
+  const inViewIds = useMemo(
+    () => new Set(computeVisible(placed, view, size, MAX_CARDS, 0).map((p) => p.photo.id)),
+    [placed, view, size]
+  )
 
   useEffect(() => {
     const t = window.setTimeout(() => setHinted(true), 1400)
@@ -352,10 +510,13 @@ export function CanvasWall({
       }}
     >
       <div
+        ref={worldRef}
         className="world"
         style={{
-          transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`,
-          transition: animating ? 'transform 0.68s cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
+          // 读 liveView：即使 React 因为别的原因重渲染，写回的也是「最新」那帧的位置，
+          // 不会把正在拖的画布弹回上一次 setState 时的位置。
+          transform: transformOf(liveView.current),
+          transition: animating ? WORLD_EASE : 'none',
         }}
       >
         {/* 背景涂鸦：world 第一个孩子，垫在相册和照片下面，跟画布一起平移 */}
@@ -379,6 +540,7 @@ export function CanvasWall({
             messageCount={counts[p.photo.id] ?? 0}
             animate={!settled}
             hiRes={hiRes}
+            priority={inViewIds.has(p.photo.id) ? 'high' : 'low'}
             onOpen={onOpenPhoto}
             onDragGuard={guard}
           />

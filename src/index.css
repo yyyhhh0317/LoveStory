@@ -1190,20 +1190,17 @@ textarea {
   background-position: center;
   background-size: cover;
   filter: blur(5px) saturate(1.22) brightness(var(--amb-b, 0.8));
-  /* 13 倍 = 2340px，够覆盖 1280×820 视口的对角线；24 倍是白白多占 3 倍显存 */
-  transform: scale(13);
+  /* 10 倍 = 1800px，够盖住 1280×820 视口的对角线（1518）；13 倍是白白多占 70% 显存 */
+  transform: scale(10);
   pointer-events: none;
   z-index: 0;
-  animation: ambience-in 0.85s var(--ease) both;
+  /* 两个槽位常驻，靠透明度交叉溶解 —— 不再随照片重挂元素、重分配合成层 */
+  opacity: 0;
+  transition: opacity 0.7s var(--ease);
 }
 
-@keyframes ambience-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 0.9;
-  }
+.viewer-ambience.is-front {
+  opacity: 0.9;
 }
 
 /* 暗色纱：上下压暗保证文字可读，中间留亮让照片自己说话 */
@@ -1608,14 +1605,18 @@ textarea {
   }
 }
 
+/*
+ * 入场只做透明度，不做 scale。
+ * 原来带一句 scale(0.99) → scale(1)：0.99 到 1 肉眼几乎看不出，
+ * 但这张图带一层 84px 模糊的 box-shadow，一缩放就得整块重新光栅，
+ * 每次换照片都多花 10–30ms —— 全花在一个看不出来的效果上。
+ */
 @keyframes img-in {
   from {
     opacity: 0;
-    transform: scale(0.99);
   }
   to {
     opacity: 1;
-    transform: scale(1);
   }
 }
 

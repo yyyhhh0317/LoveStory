@@ -74,6 +74,32 @@ npm run check
 
 ---
 
+## 离线缓存（Service Worker）
+
+`public/sw.js` 是一份手写模板，`scripts/build-sw.mjs` 在构建时把版本号和预缓存清单填进去。它做三件事：
+
+| 资源 | 策略 |
+|---|---|
+| 页面（导航） | 先要网络，3.5 秒没回来就用缓存；离线也打得开 |
+| 构建产物（JS / CSS / 图片） | 预缓存，文件名带内容哈希，永不改变 |
+| Storage 里的照片 | 优先用缓存，按条数封顶（大图 60、缩略图 200） |
+| **`rest/v1` 的接口** | **一律不拦** |
+
+最后一条是刻意的：留言写成功那一刻只有应用知道哪个 photoId 脏了，Service Worker 拿不到这个语义。让它缓存接口，只会让留言板在「读不到」和「真的没有」之间撒谎。接口数据由 `src/lib/albumCache.ts` 这一层负责（首屏先显示上次的快照，同时后台刷新）。
+
+**一条必须守住的约定**：照片的 `storage_key` 是随机 UUID，上传用 `upsert: false`，所以**同名对象永远不会有第二份内容**——这是"照片可以永久缓存"的前提。以后想换掉某张照片，请生成新的 `storage_key`；在 Supabase 面板里手动覆盖同名文件，会让已经缓存过的设备一直看到旧图。
+
+本地验证要用 `npm run preview`（dev server 下不注册）。想看子路径下的表现：
+
+```bash
+mkdir -p tmp/LoveStory && cp -r dist/* tmp/LoveStory/
+python -m http.server 8080 -d tmp   # 打开 http://127.0.0.1:8080/LoveStory/
+```
+
+要彻底下线 Service Worker，**不要**直接删注册代码——已经装过它的设备再也没机会收到通知了。正确顺序是把 `scripts/sw-kill.js` 复制成 `dist/sw.js` 部署一次，等一个发布周期（GitHub Pages 的缓存是 10 分钟，保守等一天），再从 `src/main.tsx` 删掉注册那段。
+
+---
+
 ## 交互
 
 | 操作 | 桌面 | 手机 |
@@ -208,6 +234,8 @@ src/
 │   ├── errors.ts          把原始报错翻成人话
 │   ├── throwback.ts       那年今日：往年同月同日的照片
 │   ├── flight.ts          起点矩形、飞行时长、减少动效判断
+│   ├── preload.ts         预取并解码相邻照片（换图不等下载）
+│   ├── albumCache.ts      上一次的相册快照，让二次访问不用等接口
 │   └── ../assets/paper-grain.png  封面纸纹（192×192 双极性颗粒，21KB）
 │   └── repo/
 │       ├── index.ts       有配置走 Supabase，没有就退回本地
@@ -229,6 +257,10 @@ src/
 ├── App.tsx                主题、路由状态、全局动作
 └── index.css              双主题变量 + 全部视觉细节
 supabase/schema.sql        一键建表、RLS、存储桶
+public/sw.js               Service Worker 模板（构建时注入版本与清单）
+scripts/build-sw.mjs       扫 dist 生成预缓存清单
+scripts/sw-kill.js         紧急下线 Service Worker 用（手动复制进 dist）
+scripts/check-supabase.mjs 检查环境变量是否配好
 .github/workflows/deploy.yml
 ```
 

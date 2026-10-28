@@ -139,7 +139,8 @@ export class LocalRepo implements Repo {
     return out
   }
 
-  async listMessages(photoId: string): Promise<Message[]> {
+  // 本地读是同步的，没有往返可取消，signal 收下不用
+  async listMessages(photoId: string, _signal?: AbortSignal): Promise<Message[]> {
     const all = readJson<Message[]>(MESSAGES_KEY, [])
     return all
       .filter((m) => m.photoId === photoId && !m.deletedAt)

@@ -19,6 +19,26 @@ const MAX_LEN = 300
  */
 const WIDE = '(min-width: 901px)'
 
+/**
+ * 会话内的留言缓存。
+ *
+ * 详情页这条查询实测 2.7 秒，而同一张照片的留言在几秒内几乎不会变。
+ * 翻回看过的照片就重下一遍是纯浪费，而且换图时它还在抢带宽。
+ * 只留最近 24 张 —— 再往前翻已经离得太远，留着只是占内存。
+ */
+const CACHE_MAX = 24
+const cache = new Map<string, Message[]>()
+
+function remember(photoId: string, list: Message[]) {
+  cache.delete(photoId) // 先删再插：让它排到队尾，成为「最近用过」的那个
+  cache.set(photoId, list)
+  while (cache.size > CACHE_MAX) {
+    const oldest = cache.keys().next().value
+    if (oldest === undefined) break
+    cache.delete(oldest)
+  }
+}
+
 export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
@@ -54,23 +74,51 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
      */
     if (!visible) return
     let alive = true
-    setLoading(true)
+    /*
+     * 换页时把上一条请求掐掉。
+     * 宽屏下这块面板常驻，翻一页发一次 —— 连翻八张就是八条并发，
+     * 在 Supabase 那头排队，反过来把当前这张挤得更慢。
+     */
+    const ac = new AbortController()
+
+    const hit = cache.get(photoId)
+    if (hit) {
+      // 有缓存就先摆出来，界面上不该再闪一次「正在翻这一页…」
+      setMessages(hit)
+      setLoading(false)
+    } else {
+      /*
+       * 必须清空：列表是一直渲染的（loading 只是叠在它上面一层提示），
+       * 不清就会把上一张的留言留在下面，看起来像是这张的。
+       */
+      setMessages([])
+      setLoading(true)
+    }
     setLoadFailed(false)
     setDraft('')
+
     repo
-      .listMessages(photoId)
+      .listMessages(photoId, ac.signal)
       .then((list) => {
-        if (alive) setMessages(list)
+        if (!alive) return
+        remember(photoId, list)
+        setMessages(list)
       })
       .catch(() => {
-        // 以前这里只是静默吞掉，结果「读不到」被显示成「这一张还没有留言」
-        if (alive) setLoadFailed(true)
+        if (!alive || ac.signal.aborted) return
+        /*
+         * 手上有旧内容时不把整块换成「没读出来」——
+         * 那会把已经看到的留言一起抹掉，比显示一份稍旧的内容更糟。
+         */
+        if (!hit) setLoadFailed(true)
       })
       .finally(() => {
         if (alive) setLoading(false)
       })
+
     return () => {
       alive = false
+      ac.abort()
     }
   }, [photoId, retryKey, visible])
 
@@ -81,7 +129,10 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
     setSendFailed(false)
     try {
       const created = await repo.createMessage(photoId, content.slice(0, MAX_LEN))
-      setMessages((prev) => [...prev, created])
+      const next = [...messages, created]
+      setMessages(next)
+      // 顺手把缓存也更新掉，否则翻走再翻回来会看到「少一条」
+      remember(photoId, next)
       setDraft('')
       onCountChange(1)
       if (areaRef.current) areaRef.current.style.height = 'auto'

@@ -39,7 +39,7 @@ export interface Repo {
   patchPhoto(id: string, patch: Partial<Pick<Photo, 'caption' | 'featuredAt'>>): Promise<void>
   softDeletePhoto(id: string): Promise<void>
   countMessages(): Promise<Record<string, number>>
-  listMessages(photoId: string): Promise<Message[]>
+  listMessages(photoId: string, signal?: AbortSignal): Promise<Message[]>
   createMessage(photoId: string, content: string): Promise<Message>
   /** 同步取已就绪的地址，未就绪返回 null（避免首帧闪烁） */
   peekUrl(storageKey: string, variant: ImageVariant): string | null

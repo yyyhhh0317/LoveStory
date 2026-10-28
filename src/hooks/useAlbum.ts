@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { repo } from '../lib/repo'
+import { isRemote, repo } from '../lib/repo'
 import { describeError, type FriendlyError } from '../lib/errors'
+import { readAlbumCache, writeAlbumCache } from '../lib/albumCache'
 import type { NewPhotoInput, Photo } from '../lib/types'
 
 /**
@@ -17,12 +18,39 @@ export type AlbumPhase = 'loading' | 'ready' | 'error'
 /** 免费项目被暂停时请求会一直挂着，没有超时就会永远停在加载页 */
 const LOAD_TIMEOUT_MS = 15000
 
+/**
+ * 内容签名：判断「刷新回来的东西和手上的一不一样」。
+ * 一样就不换数组 —— CanvasWall 的 layoutTimeline 以 photos 引用为依赖，
+ * PhotoCard 又以 placed 引用做 memo 比较，一次「什么都没变」的后台刷新
+ * 会白白重渲染同屏三十几张卡片。
+ */
+function photoSig(list: Photo[]): string {
+  let s = ''
+  for (const p of list) s += `${p.id}:${p.takenAt}:${p.caption ?? ''}:${p.featuredAt ?? ''}|`
+  return s
+}
+
 export function useAlbum() {
-  const [photos, setPhotos] = useState<Photo[]>([])
-  const [counts, setCounts] = useState<Record<string, number>>({})
-  const [phase, setPhase] = useState<AlbumPhase>('loading')
+  /*
+   * 上一次成功拿到的快照，同步读出来（见 lib/albumCache.ts）。
+   * 有它的时候首帧就是 ready，加载页压根不出现。
+   * 本地模式的数据本来就在 localStorage 里，再套一层缓存没意义。
+   */
+  const [seed] = useState(() => (isRemote ? readAlbumCache() : null))
+  const [photos, setPhotos] = useState<Photo[]>(seed?.photos ?? [])
+  const [counts, setCounts] = useState<Record<string, number>>(seed?.counts ?? {})
+  const [phase, setPhase] = useState<AlbumPhase>(seed ? 'ready' : 'loading')
   const [error, setError] = useState<FriendlyError | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  /** 只有真联网成功过一次，才允许把数据写回快照 */
+  const [synced, setSynced] = useState(false)
+  /**
+   * 上次同步的时刻，给「切回前台重验」做节流。
+   *
+   * 初值是「现在」而不是 0：页面刚开时浏览器也可能抛一次 visibilitychange
+   * （预渲染转正式、后台标签被唤醒），用 0 会让首屏白跑一轮完整查询。
+   */
+  const lastSync = useRef(Date.now())
 
   const photosRef = useRef<Photo[]>(photos)
   photosRef.current = photos
@@ -47,20 +75,31 @@ export function useAlbum() {
       timer = window.setTimeout(() => reject(new Error('TIMEOUT')), LOAD_TIMEOUT_MS)
     })
 
+    /*
+     * 两个查询同时发出。
+     *
+     * 原来是 await 完 listPhotos 才调 countMessages —— 1.40s 接 522ms 首尾相接，
+     * 正好凑成那两秒的加载页。它们之间没有任何依赖，没有理由排队。
+     *
+     * 但不能写成 Promise.all：那等于把留言数的 522ms 变成 phase 的前置条件，
+     * 只是把串行换了个位置。超时守卫也只该罩着照片列表。
+     */
+    const countsTask = repo.countMessages().catch(() => null)
+    const listTask = repo.listPhotos()
+
     try {
-      const list = await Promise.race([repo.listPhotos(), timeout])
+      const list = await Promise.race([listTask, timeout])
       if (my !== gen.current) return
-      setPhotos(list)
+      if (photoSig(list) !== photoSig(photosRef.current)) setPhotos(list)
       setError(null)
       setPhase('ready')
+      setSynced(true)
+      lastSync.current = Date.now()
 
       // 留言数读不到不该拖垮整本相册，失败就降级为空
-      repo
-        .countMessages()
-        .then((next) => {
-          if (my === gen.current) setCounts(next)
-        })
-        .catch(() => undefined)
+      void countsTask.then((next) => {
+        if (next && my === gen.current) setCounts(next)
+      })
     } catch (err) {
       if (my !== gen.current) return
       setError(describeError(err))
@@ -83,6 +122,36 @@ export function useAlbum() {
     }
     window.addEventListener('online', onOnline)
     return () => window.removeEventListener('online', onOnline)
+  }, [reload])
+
+  /*
+   * 写回快照：一个 effect 兜住所有写路径。
+   * 上传、软删、星标、改简介、留言数最后都会落到 photos / counts 上，
+   * 所以不必在 addPhotos、removePhoto 里各插一行 —— 那样必漏。
+   *
+   * synced 是门槛：没成功联网过就写，等于把「刚用缓存初始化的数据」
+   * 当成真数据存一遍，savedAt 也会被刷成现在，留言数的 24 小时 TTL
+   * 就永远不会过期。
+   */
+  useEffect(() => {
+    if (!isRemote || !synced || phase !== 'ready') return
+    const t = window.setTimeout(() => writeAlbumCache(photos, counts), 400)
+    return () => window.clearTimeout(t)
+  }, [photos, counts, phase, synced])
+
+  /*
+   * 从别的标签页 / 后台切回来时对一眼。
+   * 不做定时轮询 —— 两个人的相册，没必要像监控那样一直跑。
+   * 60 秒内刚同步过就跳过，来回切标签时不会连着发请求。
+   */
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - lastSync.current < 60_000) return
+      void reload()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [reload])
 
   /**

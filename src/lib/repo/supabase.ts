@@ -69,9 +69,13 @@ export class SupabaseRepo implements Repo {
   }
 
   async listPhotos(): Promise<Photo[]> {
+    /*
+     * 显式列而不是 *：以后给表加列（比如隐藏字段、审计列）时，
+     * 不会悄悄把 payload 撑大，也不用担心列顺序变化影响 toPhoto 的映射。
+     */
     const { data, error } = await this.client
       .from('photos')
-      .select('*')
+      .select('id,storage_key,width,height,aspect,taken_at,caption,featured_at,created_at,deleted_at')
       .is('deleted_at', null)
       .order('taken_at', { ascending: true })
     if (error) throw error
@@ -173,13 +177,15 @@ export class SupabaseRepo implements Repo {
     return out
   }
 
-  async listMessages(photoId: string): Promise<Message[]> {
-    const { data, error } = await this.client
+  async listMessages(photoId: string, signal?: AbortSignal): Promise<Message[]> {
+    const query = this.client
       .from('messages')
       .select('*')
       .eq('photo_id', photoId)
       .is('deleted_at', null)
       .order('created_at', { ascending: true })
+    // 详情页快速翻页时，上一张的请求已经没有意义了，别让它继续占着连接
+    const { data, error } = await (signal ? query.abortSignal(signal) : query)
     if (error) throw error
     return (data as MessageRow[]).map(toMessage)
   }

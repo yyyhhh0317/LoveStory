@@ -73,11 +73,18 @@ async function fetchWithTimeout(request, ms) {
  * 导航请求：网络优先，3.5 秒没回来就用缓存。
  * HTML 必须拿最新的，否则新部署的 hash 对不上，页面会去要已经删掉的 chunk。
  */
-async function networkFirst(request) {
+async function networkFirst(event) {
+  const request = event.request
   const cache = await caches.open(CORE)
   try {
     const res = await fetchWithTimeout(request, 3500)
-    if (res && res.ok) cache.put(request, res.clone())
+    if (res && res.ok) {
+      /*
+       * 写缓存**不能 await**：await 意味着页面要等这一笔磁盘写完才开始解析 HTML。
+       * 写盘本身不慢，但它是排队的 —— 首屏同时还有几十个请求在等这条链路。
+       */
+      event.waitUntil(cache.put(request, res.clone()).catch(() => {}))
+    }
     return res
   } catch {
     // 先找这次导航自己的缓存，没有就回落 index.html —— 单页应用任何路径都该能开门
@@ -109,7 +116,8 @@ async function maybeTrim(cacheName, max) {
   for (const k of keys.slice(0, keys.length - max)) await cache.delete(k)
 }
 
-async function cacheFirst(request, cacheName, max) {
+async function cacheFirst(event, cacheName, max) {
+  const request = event.request
   const cache = await caches.open(cacheName)
   // ignoreVary：跨域图片的响应头读不到，Vary 匹配会失手
   const hit = await cache.match(request, { ignoreVary: true })
@@ -118,15 +126,27 @@ async function cacheFirst(request, cacheName, max) {
   const res = await fetch(request)
   /*
    * opaque（跨域 no-cors）也算成功：内容读不了，但正是要缓存的图片。
-   * clone 之后 put —— put 会吃掉 body。
+   *
+   * **写缓存绝对不能在返回之前 await。**
+   * 这是这个文件里最贵的一个错误：await cache.put() 意味着页面要等这几百 KB
+   * 全部写完磁盘才开始收到响应体。图片还好，但它会占住这条链路，
+   * 后面排队的请求（氛围层的缩略图、下一张预取）全被一起拖住 ——
+   * 表现出来就是「所有图片都在同一秒才完成」。
+   *
+   * 响应立刻返回，写入交给 waitUntil 在后台做完。
    */
   if (res && (res.ok || res.type === 'opaque')) {
-    try {
-      await cache.put(request, res.clone())
-      if (max) await maybeTrim(cacheName, max)
-    } catch {
-      /* 配额满或响应不可缓存：不算错，下次再试 */
-    }
+    const copy = res.clone()
+    event.waitUntil(
+      (async () => {
+        try {
+          await cache.put(request, copy)
+          if (max) await maybeTrim(cacheName, max)
+        } catch {
+          /* 配额满或响应不可缓存：不算错，下次再试 */
+        }
+      })()
+    )
   }
   return res
 }
@@ -138,13 +158,13 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url)
 
   if (req.mode === 'navigate') {
-    event.respondWith(networkFirst(req))
+    event.respondWith(networkFirst(event))
     return
   }
 
   /* 自己的东西：文件名带内容哈希，内容永不改变 */
   if (url.href.startsWith(SCOPE)) {
-    event.respondWith(cacheFirst(req, CORE))
+    event.respondWith(cacheFirst(event, CORE))
     return
   }
 
@@ -159,7 +179,7 @@ self.addEventListener('fetch', (event) => {
     if (req.mode === 'cors') return
     const full = url.pathname.endsWith('/full.webp')
     event.respondWith(
-      cacheFirst(req, full ? IMG_FULL : IMG_THUMB, full ? FULL_MAX : THUMB_MAX)
+      cacheFirst(event, full ? IMG_FULL : IMG_THUMB, full ? FULL_MAX : THUMB_MAX)
     )
     return
   }

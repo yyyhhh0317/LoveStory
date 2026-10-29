@@ -1417,6 +1417,25 @@ textarea {
   visibility: hidden;
 }
 
+/*
+ * 主图还没到之前垫在下面的缩略图。
+ *
+ * 绝对定位铺满 .viewer-frame（它是 position: relative 的），再用
+ * object-fit: contain —— 和主图在主轴上的包含算法一致，所以两者
+ * 摆出来的位置和大小完全重合，换成主图时不会跳。
+ * 不播 img-in、不投自己的阴影：它只是等位，不是一张独立的照片。
+ */
+.viewer-frame img.viewer-ph {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: none;
+  box-shadow: none;
+  pointer-events: none;
+}
+
 /* 一张纸页：垫底页、垫底旧页、叶子正反面共用同一套纸的样子 */
 .book-paper {
   position: absolute;

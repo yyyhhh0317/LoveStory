@@ -1,7 +1,7 @@
 import { useLayoutEffect, useEffect, useRef, useState } from 'react'
 import { useImgUrl } from '../hooks/useImgUrl'
 import { repo } from '../lib/repo'
-import { preloadImage, whenIdle } from '../lib/preload'
+import { prefetchAllowance, preloadImage, whenIdle } from '../lib/preload'
 import { formatDayCn } from '../lib/format'
 import type { Photo, ImageVariant } from '../lib/types'
 import { FLIP_MS, prefersReducedMotion, type FrameRect } from '../lib/flight'
@@ -87,8 +87,15 @@ export function Viewer({
   const [landed, setLanded] = useState(!flew)
   /* 飞行动画已走完（FlightPhoto 的 onDone），等真图就绪后一起原子落地 */
   const [flightDone, setFlightDone] = useState(false)
-  /* 真图已经解码完，可以和飞行层无缝交换 */
-  const [imgReady, setImgReady] = useState(false)
+  /*
+   * 真图已经解码完的是**哪一张**。
+   *
+   * 原来是一个 boolean，只在第一张被设成 true —— 之后就再也回不到 false，
+   * 于是「等真图就绪再落地」这条逻辑从第二张起完全失效：动画一结束就落地，
+   * 慢网下直接露出中间那块空白。现在按 photoId 记，每张各自算。
+   */
+  const [readyId, setReadyId] = useState<string | null>(null)
+  const imgReady = Boolean(photo && readyId === photo.id)
   /* 氛围层挂载开关：刻意错开落地那一帧（见下方 effect） */
   const [ambienceOn, setAmbienceOn] = useState(!flew)
   /*
@@ -207,20 +214,58 @@ export function Viewer({
    * 60–180ms，而它偏偏发生在翻页动画的第一帧。提前 decode() 掉，翻过去就只剩合成。
    * 顺序上先紧后松：下一张马上要，再远的两张等浏览器空闲，别抢当前这张的带宽。
    */
+  /*
+   * 预取的在途控制表，key 是 storageKey。
+   *
+   * 换页时要撤掉「已经不需要的」预取，但**绝不能撤掉马上就轮到的那些** ——
+   * 那张上一轮刚开始下，撤掉等于让它从头再下一遍，比不预取还慢。
+   * 所以按 key 记账，新的邻居集合里还留着的就不动它。
+   */
+  const prefetchCtl = useRef(new Map<string, AbortController>())
+  useEffect(() => {
+    const map = prefetchCtl.current
+    return () => {
+      for (const ac of map.values()) ac.abort()
+      map.clear()
+    }
+  }, [])
+
   useEffect(() => {
     if (!photos.length) return
-    let alive = true
-    const targets: Photo[] = []
-    // 只铺三张：下一张、上一张、再下一张。铺太多会在慢网上把当前这张的带宽挤掉
-    for (const d of [1, -1, 2]) {
-      const p = photos[index + d]
-      if (p?.storageKey) targets.push(p)
+    /*
+     * 预取几张，取决于这条链路有多宽。
+     * 原来固定铺三张，在慢网下等于让三张邻图去抢当前那张的带宽 ——
+     * 实测 30 KB/s 时，三张 1800px 加一起要 20 秒，用户看到的就是
+     * 「点开一张照片要等七八秒」。宁可少铺，也不要抢。
+     */
+    const budget = prefetchAllowance()
+    // 顺序有意义：先下一张，再上一张，再下一张 —— 额度只有 1 时就是「只铺下一张」
+    const wanted: string[] = []
+    if (budget > 0) {
+      for (const d of [1, -1, 2]) {
+        if (wanted.length >= budget) break
+        const key = photos[index + d]?.storageKey
+        if (key && !wanted.includes(key)) wanted.push(key)
+      }
     }
-    if (!targets.length) return
 
+    const map = prefetchCtl.current
+    const keep = new Set(wanted)
+    for (const [key, ac] of map) {
+      if (!keep.has(key)) {
+        ac.abort()
+        map.delete(key)
+      }
+    }
+    if (!wanted.length) return
+
+    let alive = true
     const run = async () => {
-      for (let i = 0; i < targets.length; i++) {
+      for (let i = 0; i < wanted.length; i++) {
         if (!alive) return
+        const key = wanted[i]
+        // 上一轮已经在下了，别重复发
+        if (map.has(key)) continue
         /*
          * 只等「让一步」，不等「下载完」。
          * 原来写的是 await preloadImage(...)：一张 1800px 的大图在慢网下要好几秒，
@@ -229,11 +274,14 @@ export function Viewer({
          */
         if (i > 0) await whenIdle()
         if (!alive) return
-        const key = targets[i].storageKey
         // Supabase 是同步拼 URL；本地模式要等 IndexedDB 读出来
         const url = repo.peekUrl(key, 'full') ?? (await repo.resolveUrl(key, 'full'))
-        if (!alive || !url) continue
-        void preloadImage(url, 'low')
+        if (!alive || !url || map.has(key)) continue
+        const ac = new AbortController()
+        map.set(key, ac)
+        void preloadImage(url, 'low', ac.signal).then(() => {
+          if (map.get(key) === ac) map.delete(key)
+        })
       }
     }
     void run()
@@ -365,10 +413,12 @@ export function Viewer({
   }, [landed, ambienceOn])
 
   /* 缓存图可能赶在 onLoad 挂上之前就解码完，兜一层 complete 检查 */
+  const currentId = photo?.id ?? null
   useEffect(() => {
+    if (!currentId) return
     const el = imgRef.current
-    if (el && el.complete && el.naturalWidth > 0) setImgReady(true)
-  }, [photo?.id, fullUrl, thumbUrl])
+    if (el && el.complete && el.naturalWidth > 0) setReadyId(currentId)
+  }, [currentId, fullUrl, thumbUrl])
 
   /*
    * 把背景平均亮度拉到 0.32 附近：暗照片提亮、亮照片压暗。
@@ -651,6 +701,35 @@ export function Viewer({
             )}
 
             {/*
+              缩略图垫底。
+              主图的 src 是 1800px 大图，慢网下要好几秒 —— 这段时间 <img> 里
+              一个像素都没有，中间就是一块空白，氛围层在四周模糊地亮着，
+              反而更显得中间缺了一块。缩略图（560px，约 40KB）几乎一定已经
+              在缓存里（画布和内页显示的就是它），先把它铺上去，
+              大图解码完再让它退场。
+
+              class 与主图保持同一套，翻页时的隐藏规则才不会错位。
+            */}
+            {thumbUrl && !imgReady && (
+              <img
+                key={`ph-${photo.id}`}
+                src={thumbUrl}
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                decoding="async"
+                className={
+                  flip && !isFirstShot
+                    ? turn?.dir === -1
+                      ? 'book-still book-hidden viewer-ph'
+                      : 'book-still viewer-ph'
+                    : 'viewer-ph'
+                }
+                style={holeStyle}
+              />
+            )}
+
+            {/*
               这张 img：相册模式下绝对定位在纸页的留白区里，且永远不播
               img-in 淡入 —— 它要么是被翻页露出来的底图，要么正被叶子
               盖着，淡入会在叶子掀开时露馅。往回翻的整个过程中它还要
@@ -659,7 +738,7 @@ export function Viewer({
             <img
               ref={imgRef}
               key={photo.id}
-              onLoad={() => setImgReady(true)}
+              onLoad={() => setReadyId(photo.id)}
               decoding="async"
               fetchPriority="high"
               className={

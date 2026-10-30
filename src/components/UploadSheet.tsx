@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { processImage } from '../lib/image'
 import { fromDateInputValue, toDateInputValue, uid } from '../lib/format'
+import { usePresence } from '../lib/presence'
 import type { NewPhotoInput, Photo } from '../lib/types'
 import { CloseIcon } from './icons'
 
@@ -31,19 +32,35 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
   const [over, setOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const urlsRef = useRef<string[]>([])
+  /* 关闭时先淡出再卸载，所以「在不在 DOM 里」看 mounted，不看 open */
+  const { mounted, closing } = usePresence(open)
 
+  /*
+   * 清场要等真正卸载之后再做。
+   * 挂在 open 上的话，按下关闭的那一帧缩略图就先没了，
+   * 面板还要淡 240ms，中间那段是一个空壳 —— 比不做动画更难看。
+   */
   useEffect(() => {
-    if (!open) {
-      urlsRef.current.forEach((u) => URL.revokeObjectURL(u))
-      urlsRef.current = []
-      setItems([])
-      setError(null)
-      setProgress(null)
-      setBusy(false)
-    }
-  }, [open])
+    if (mounted) return
+    urlsRef.current.forEach((u) => URL.revokeObjectURL(u))
+    urlsRef.current = []
+    setItems([])
+    setError(null)
+    setProgress(null)
+    setBusy(false)
+  }, [mounted])
 
-  if (!open) return null
+  /* 面板只有「点遮罩 / 点 X / 点先不传」三条关闭路径，键盘用户被关在里面 */
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!mounted) return null
 
   const addFiles = async (files: FileList | File[]) => {
     const list = Array.from(files).filter((f) => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name))
@@ -128,7 +145,10 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
   const remaining = items.length
 
   return (
-    <div className="sheet-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      className={`sheet-backdrop${closing ? ' closing' : ''}`}
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
       <div className="sheet" role="dialog" aria-modal="true" aria-label="上传照片">
         <div className="sheet-head">
           <div>
@@ -139,13 +159,20 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
               简介可以留空，之后在详情页随时补。
             </p>
           </div>
-          <button type="button" className="icon-btn" style={{ color: 'var(--ink-faint)' }} onClick={onClose} aria-label="关闭">
+          <button
+            type="button"
+            className="icon-btn icon-btn--on-light"
+            onClick={onClose}
+            aria-label="关闭"
+          >
             <CloseIcon size={18} />
           </button>
         </div>
 
         <div className="sheet-body">
-          <div
+          {/* 这里原来是个 div：全站最重要的入口，键盘完全到不了 */}
+          <button
+            type="button"
             className={`dropzone${over ? ' over' : ''}`}
             onClick={() => inputRef.current?.click()}
             onDragOver={(e) => {
@@ -159,9 +186,13 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
               void addFiles(e.dataTransfer.files)
             }}
           >
-            <div className="big">{busy ? `正在处理 ${progress?.done ?? 0} / ${progress?.total ?? 0}` : '点这里选照片'}</div>
-            <div className="small">也可以直接把照片拖进来 · 支持多选 · JPG / PNG / WEBP</div>
-          </div>
+            <span className="big">
+              {busy
+                ? `正在处理 ${progress?.done ?? 0} / ${progress?.total ?? 0}`
+                : '点这里选照片'}
+            </span>
+            <span className="small">也可以直接把照片拖进来 · 支持多选 · JPG / PNG / WEBP</span>
+          </button>
 
           <input
             ref={inputRef}
@@ -176,13 +207,13 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
           />
 
           {error && (
-            <p style={{ margin: '12px 2px 0', fontSize: 12, color: '#b4574f', lineHeight: 1.7 }}>
+            <p className="sheet-error" role="alert">
               {error}
             </p>
           )}
 
           {items.length > 0 && (
-            <div className="pending-list" style={{ marginTop: 16 }}>
+            <div className="pending-list">
               {items.map((it) => (
                 <div className="pending-item" key={it.key}>
                   <div className="thumb">

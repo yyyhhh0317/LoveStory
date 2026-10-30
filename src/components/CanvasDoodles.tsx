@@ -44,6 +44,13 @@ const rand01 = (h: number) => h / 4294967296
 
 const col = (slot: number) => `var(--doodle-${((slot % COLOR_N) + COLOR_N) % COLOR_N + 1})`
 
+/*
+ * 贴纸感来源：彩色描边下面垫一道「纸白」。
+ * 走 token 而不是写死 #fffdf6 —— 它在暗色/亮色下都要能取到同一档。
+ * （presentation attribute 里放 var() 在本项目已经在用，见上面的 col()）
+ */
+const PAPER = 'var(--doodle-paper)'
+
 /* 经典心形轮廓，几个爱心变体共用 */
 const HEART_D =
   'M50 84 C 22 64, 12 42, 23 29 C 32 19, 45 22, 50 33 C 55 22, 68 19, 77 29 C 88 42, 78 64, 50 84 Z'
@@ -60,8 +67,8 @@ function Shape({ v, c }: ShapeProps) {
     case 0: // 果冻爱心
       return (
         <g>
-          <path d={HEART_D} fill={col(c)} stroke="#fffdf6" strokeWidth={4} paintOrder="stroke" strokeLinejoin="round" />
-          <ellipse cx={37} cy={34} rx={6} ry={3.6} fill="#fffdf6" opacity={0.85} transform="rotate(-24 37 34)" />
+          <path d={HEART_D} fill={col(c)} stroke={PAPER} strokeWidth={4} paintOrder="stroke" strokeLinejoin="round" />
+          <ellipse cx={37} cy={34} rx={6} ry={3.6} fill={PAPER} opacity={0.85} transform="rotate(-24 37 34)" />
         </g>
       )
     case 1: // 马克笔空心爱心（歪一点的轮廓）
@@ -69,7 +76,7 @@ function Shape({ v, c }: ShapeProps) {
         <g fill="none" strokeLinecap="round" strokeLinejoin="round">
           <path
             d="M50 84 C 24 66, 10 44, 22 30 C 31 20, 45 24, 50 34 C 56 23, 69 20, 78 30 C 89 43, 76 66, 50 84"
-            stroke="#fffdf6"
+            stroke={PAPER}
             strokeWidth={12}
             opacity={0.9}
           />
@@ -92,13 +99,13 @@ function Shape({ v, c }: ShapeProps) {
     case 3: // 单只气球 + 飘绳
       return (
         <g>
-          <ellipse cx={50} cy={36} rx={17} ry={21} fill={col(c)} stroke="#fffdf6" strokeWidth={3.5} paintOrder="stroke" />
-          <ellipse cx={44} cy={29} rx={4.5} ry={6} fill="#fffdf6" opacity={0.8} transform="rotate(-18 44 29)" />
+          <ellipse cx={50} cy={36} rx={17} ry={21} fill={col(c)} stroke={PAPER} strokeWidth={3.5} paintOrder="stroke" />
+          <ellipse cx={44} cy={29} rx={4.5} ry={6} fill={PAPER} opacity={0.8} transform="rotate(-18 44 29)" />
           <path d="M47 57 L50 61 L53 57 Z" fill={col(c)} />
           <path
             d="M50 61 q 7 9 -1 16 q -7 7 1 14"
             fill="none"
-            stroke="#fffdf6"
+            stroke={PAPER}
             strokeWidth={6}
             opacity={0.9}
             strokeLinecap="round"
@@ -117,8 +124,8 @@ function Shape({ v, c }: ShapeProps) {
             ] as const
           ).map(([bx, by, r, k]) => (
             <g key={k}>
-              <ellipse cx={bx} cy={by} rx={r} ry={r * 1.22} fill={col(c + k)} stroke="#fffdf6" strokeWidth={3} paintOrder="stroke" />
-              <ellipse cx={bx - r * 0.32} cy={by - r * 0.42} rx={r * 0.26} ry={r * 0.38} fill="#fffdf6" opacity={0.8} />
+              <ellipse cx={bx} cy={by} rx={r} ry={r * 1.22} fill={col(c + k)} stroke={PAPER} strokeWidth={3} paintOrder="stroke" />
+              <ellipse cx={bx - r * 0.32} cy={by - r * 0.42} rx={r * 0.26} ry={r * 0.38} fill={PAPER} opacity={0.8} />
               <path
                 d={`M${bx} ${by + r * 1.22 + 3} Q ${bx + (50 - bx) * 0.4} ${by + 30} 51 88`}
                 fill="none"
@@ -138,16 +145,16 @@ function Shape({ v, c }: ShapeProps) {
           <path
             d={HEART_D}
             fill={col(c)}
-            stroke="#fffdf6"
+            stroke={PAPER}
             strokeWidth={3.5}
             paintOrder="stroke"
             transform="translate(50 44) scale(0.62) translate(-50 -50)"
           />
-          <ellipse cx={39} cy={27} rx={3.6} ry={2.2} fill="#fffdf6" opacity={0.85} transform="rotate(-22 39 27)" />
+          <ellipse cx={39} cy={27} rx={3.6} ry={2.2} fill={PAPER} opacity={0.85} transform="rotate(-22 39 27)" />
           <path
             d="M50 62 q 8 10 0 18 q -8 8 1 14"
             fill="none"
-            stroke="#fffdf6"
+            stroke={PAPER}
             strokeWidth={6}
             opacity={0.9}
             strokeLinecap="round"
@@ -164,7 +171,7 @@ function Shape({ v, c }: ShapeProps) {
             <g key={y}>
               <path
                 d={`M14 ${y} q 9 -11 18 0 t 18 0 t 18 0 t 18 0`}
-                stroke="#fffdf6"
+                stroke={PAPER}
                 strokeWidth={10}
                 opacity={0.9}
               />
@@ -178,7 +185,7 @@ function Shape({ v, c }: ShapeProps) {
         <g fill="none" strokeLinecap="round" strokeLinejoin="round">
           <path
             d="M12 56 q 10 -15 20 0 t 20 0 t 20 0 q 9 0 7 -9 q -2 -9 -11 -5"
-            stroke="#fffdf6"
+            stroke={PAPER}
             strokeWidth={11}
             opacity={0.9}
           />
@@ -198,7 +205,7 @@ function Shape({ v, c }: ShapeProps) {
             ] as const
           ).map(([d, k]) => (
             <g key={d}>
-              <path d={d} stroke="#fffdf6" strokeWidth={12} opacity={0.9} />
+              <path d={d} stroke={PAPER} strokeWidth={12} opacity={0.9} />
               <path d={d} stroke={col(c + k)} strokeWidth={6} />
             </g>
           ))}
@@ -207,7 +214,7 @@ function Shape({ v, c }: ShapeProps) {
     case 9: // 双色弧 + 云朵端（果冻）
       return (
         <g fill="none" strokeLinecap="round">
-          <path d="M22 60 A 29 29 0 0 1 78 60" stroke="#fffdf6" strokeWidth={13} opacity={0.9} />
+          <path d="M22 60 A 29 29 0 0 1 78 60" stroke={PAPER} strokeWidth={13} opacity={0.9} />
           <path d="M22 60 A 29 29 0 0 1 78 60" stroke={col(c)} strokeWidth={7} />
           <path d="M32 60 A 19 19 0 0 1 68 60" stroke={col(c + 3)} strokeWidth={7} />
           {(
@@ -216,7 +223,7 @@ function Shape({ v, c }: ShapeProps) {
               [82, 62, 7, 5.5, 5],
             ] as const
           ).map(([cx, cy, r1, r2, dx], k) => (
-            <g key={k} fill="#fffdf6" stroke={col(c + 2)} strokeWidth={2.4}>
+            <g key={k} fill={PAPER} stroke={col(c + 2)} strokeWidth={2.4}>
               <circle cx={cx} cy={cy} r={r1} />
               <circle cx={cx + dx} cy={cy + 2.5} r={r2} />
               <circle cx={cx - dx} cy={cy + 3.5} r={r2 * 0.8} />
@@ -232,7 +239,7 @@ function Shape({ v, c }: ShapeProps) {
           <path
             d="M50 14 C 54 38, 62 46, 86 50 C 62 54, 54 62, 50 86 C 46 62, 38 54, 14 50 C 38 46, 46 38, 50 14 Z"
             fill={col(c)}
-            stroke="#fffdf6"
+            stroke={PAPER}
             strokeWidth={3.5}
             paintOrder="stroke"
             strokeLinejoin="round"
@@ -253,12 +260,12 @@ function Shape({ v, c }: ShapeProps) {
               rx={7.5}
               ry={12}
               transform={`rotate(${a} ${50 + 19 * Math.sin((a * Math.PI) / 180)} ${50 - 19 * Math.cos((a * Math.PI) / 180)})`}
-              fill="#fffdf6"
+              fill={PAPER}
               stroke={col(c)}
               strokeWidth={2.6}
             />
           ))}
-          <circle cx={50} cy={50} r={9} fill={col(c + 1)} stroke="#fffdf6" strokeWidth={2.5} />
+          <circle cx={50} cy={50} r={9} fill={col(c + 1)} stroke={PAPER} strokeWidth={2.5} />
         </g>
       )
     default: {
@@ -281,7 +288,7 @@ function Shape({ v, c }: ShapeProps) {
               cy={dy}
               r={6.4 - (k % 2) * 1.2}
               fill={col(c + k)}
-              stroke="#fffdf6"
+              stroke={PAPER}
               strokeWidth={2.8}
               paintOrder="stroke"
             />

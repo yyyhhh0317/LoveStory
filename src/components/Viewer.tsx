@@ -1,10 +1,11 @@
-import { useLayoutEffect, useEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useEffect, useRef, useState } from 'react'
 import { useImgUrl } from '../hooks/useImgUrl'
 import { repo } from '../lib/repo'
 import { prefetchAllowance, preloadImage, whenIdle } from '../lib/preload'
 import { formatDayCn } from '../lib/format'
 import type { Photo, ImageVariant } from '../lib/types'
 import { FLIP_MS, prefersReducedMotion, type FrameRect } from '../lib/flight'
+import { DISSOLVE_MS } from '../lib/presence'
 import { FlightPhoto } from './FlightPhoto'
 import { MessageBoard } from './MessageBoard'
 import {
@@ -77,6 +78,21 @@ export function Viewer({
   const [draft, setDraft] = useState('')
   const [annotOpen, setAnnotOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  /*
+   * 关闭分两步：先给根节点挂 closing 淡出，DISSOLVE_MS 之后才真的交给父级卸载。
+   * 直接卸载的话，满屏暗色会在一帧之内切回亮着的画布，眼睛会「跳」一下 ——
+   * 这一层是整站最大的一块面，最需要它慢慢退。
+   */
+  const [closing, setClosing] = useState(false)
+  const requestClose = useCallback(() => {
+    if (closing) return
+    if (prefersReducedMotion()) {
+      onClose()
+      return
+    }
+    setClosing(true)
+    window.setTimeout(onClose, DISSOLVE_MS)
+  }, [closing, onClose])
   const [ambLum, setAmbLum] = useState<number | null>(null)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
   const frameRef = useRef<HTMLDivElement>(null)
@@ -434,7 +450,7 @@ export function Viewer({
         if (editing) {
           setEditing(false)
         } else {
-          onClose()
+          requestClose()
         }
         return
       }
@@ -446,7 +462,7 @@ export function Viewer({
     return () => window.removeEventListener('keydown', onKey)
     // go 在下方才声明，不能进依赖数组（TDZ）；闭包在 effect 执行时已就绪
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing, index, photos.length, onClose, onIndexChange])
+  }, [editing, index, photos.length, requestClose, onIndexChange])
 
   if (!photo) return null
 
@@ -596,10 +612,14 @@ export function Viewer({
       : undefined
   const pageStyle = (r: FrameRect) => ({ left: r.x, top: r.y, width: r.w, height: r.h })
 
+  /* 它盖住整屏、接管 ←/→/Esc，对读屏和键盘来说就是一个模态 */
   return (
     <div
-      className={`viewer${flew ? ' is-flight' : ''}`}
+      className={`viewer${flew ? ' is-flight' : ''}${closing ? ' closing' : ''}`}
       style={{ ['--amb-b' as string]: String(ambBrightness) }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="照片详情"
     >
       {/*
         底色层。
@@ -641,7 +661,7 @@ export function Viewer({
         <div className="viewer-tools">
           <button
             type="button"
-            className={`icon-btn${photo.featuredAt ? ' on' : ''}`}
+            className={`icon-btn icon-btn--on-dark${photo.featuredAt ? ' on' : ''}`}
             onClick={() => onToggleFeatured(photo)}
             title={photo.featuredAt ? '从相册里移出' : '收进中心相册'}
             aria-label={photo.featuredAt ? '从相册里移出' : '收进中心相册'}
@@ -650,7 +670,7 @@ export function Viewer({
           </button>
           <button
             type="button"
-            className={`icon-btn${confirmDelete ? ' on' : ''}`}
+            className={`icon-btn icon-btn--on-dark${confirmDelete ? ' on' : ''}`}
             onClick={() => {
               if (confirmDelete) {
                 onDelete(photo)
@@ -661,11 +681,16 @@ export function Viewer({
             }}
             title={confirmDelete ? '再点一次确认' : '删除这张'}
             aria-label="删除这张"
-            style={confirmDelete ? { color: '#e0736c' } : undefined}
+            style={confirmDelete ? { color: 'var(--danger-on-dark)' } : undefined}
           >
             <TrashIcon size={16} />
           </button>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭">
+          <button
+            type="button"
+            className="icon-btn icon-btn--on-dark"
+            onClick={requestClose}
+            aria-label="关闭"
+          >
             <CloseIcon size={18} />
           </button>
         </div>
@@ -862,6 +887,8 @@ export function Viewer({
         type="button"
         className={`annot-toggle${annotOpen ? ' hidden' : ''}`}
         onClick={() => setAnnotOpen((v) => !v)}
+        aria-expanded={annotOpen}
+        aria-controls="annot-panel"
       >
         <MessageIcon size={15} />
         {messageCount > 0 ? `留言 ${messageCount}` : '写留言'}

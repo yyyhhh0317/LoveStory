@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react'
-import { FLIGHT_MS, type FrameRect } from '../lib/flight'
+import { FLIGHT_MS, prefersReducedMotion, type FrameRect } from '../lib/flight'
 
 interface Props {
   from: FrameRect
@@ -49,6 +49,17 @@ export function FlightPhoto({ from, to, src, onDone }: Props) {
      * 都要重绘整张 868×651 的图（连阴影一起重画），飞行立刻变得一顿一顿。
      * 圆角固定 8px：起点那张缩略图本来也接近这个值，中间过渡看不出来。
      */
+    /*
+     * index.css 末尾那条全局 prefers-reduced-motion 只压 CSS 的时长，
+     * 盖不住 WAAPI —— 这里必须自己判。
+     * 而且不能只把 duration 设成 0：那仍会生成一次 forwards 的合成层，
+     * 等于白付一次光栅化。直接跳过动画、下一帧落地。
+     */
+    if (prefersReducedMotion()) {
+      const raf = requestAnimationFrame(finish)
+      return () => cancelAnimationFrame(raf)
+    }
+
     const anim = el.animate(
       [{ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }, { transform: 'none' }],
       {

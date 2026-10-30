@@ -152,7 +152,7 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
   }
 
   return (
-    <aside className={`annot${open ? ' open' : ''}`} aria-label="留言板">
+    <aside id="annot-panel" className={`annot${open ? ' open' : ''}`} aria-label="留言板">
       <div className="annot-head">
         <h3>留言</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -167,7 +167,7 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
           </span>
           <button
             type="button"
-            className="icon-btn"
+            className="icon-btn icon-btn--on-dark"
             style={{ display: 'none' }}
             data-mobile-close
             onClick={onClose}

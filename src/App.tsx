@@ -10,6 +10,7 @@ import { albumOrder, timelineOrder } from './lib/layout'
 import { formatDay } from './lib/format'
 import { findThrowback, todayKey } from './lib/throwback'
 import { toFrameRect, type FrameRect } from './lib/flight'
+import { usePresence } from './lib/presence'
 import { isRemote } from './lib/repo'
 import type { NewPhotoInput, Photo } from './lib/types'
 
@@ -36,16 +37,35 @@ export default function App() {
     () => localStorage.getItem(THROWBACK_KEY) === todayKey()
   )
   const toastTimer = useRef<number | null>(null)
+  /*
+   * 提示条要淡出，就得在 setToast(null) 之后再活一小会儿。
+   * 但那会儿 toast 已经是 null 了，正文得单独留一份，否则淡出去的是个空壳。
+   */
+  const lastToast = useRef('')
+  const toastVisible = usePresence(Boolean(toast))
+  /*
+   * 打开详情页前把焦点记下来。
+   * 页面是无障碍的弹层，关掉之后焦点不回原位，键盘用户就得从文档开头重新 Tab 一遍。
+   * 记的是 DOM 节点，卡片本身不会因为开详情页而卸载，所以这个引用一直有效。
+   */
+  const returnFocus = useRef<HTMLElement | null>(null)
+  const rememberFocus = useCallback(() => {
+    returnFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+  }, [])
 
   useEffect(() => {
+    /* index.html 里的内联脚本已经在首帧前设过一遍；这里重设一次是防御性的，
+       万一 localStorage 被禁用、脚本没跑成，也不至于停在 default 的奶油上 */
     document.documentElement.dataset.theme = theme
     localStorage.setItem(THEME_KEY, theme)
     const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', theme === 'blush' ? '#FDF1F2' : '#FBF5EE')
+    if (meta) meta.setAttribute('content', theme === 'blush' ? '#fdf1f2' : '#f9f2e8')
   }, [theme])
 
   /** 失败提示比成功提示多留一会儿，因为要看清的是「需要再做什么」 */
   const say = useCallback((text: string, ms = 2600) => {
+    lastToast.current = text
     setToast(text)
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
     toastTimer.current = window.setTimeout(() => setToast(null), ms)
@@ -73,10 +93,14 @@ export default function App() {
    * 每次 App 重渲染（弹一条 toast、切主题）都换一个新函数的话，
    * 同屏三十几张卡片会全部重渲染一遍，正好落在「动画进行中」的那些帧上。
    */
-  const openPhoto = useCallback((photo: Photo, rect: DOMRect | null = null) => {
-    setOrigin(toFrameRect(rect))
-    setViewer({ mode: 'timeline', photoId: photo.id })
-  }, [])
+  const openPhoto = useCallback(
+    (photo: Photo, rect: DOMRect | null = null) => {
+      rememberFocus()
+      setOrigin(toFrameRect(rect))
+      setViewer({ mode: 'timeline', photoId: photo.id })
+    },
+    [rememberFocus]
+  )
 
   /*
    * photoId 是内页上那张（相册第一张）。按 id 找而不是直接取 featured[0] ——
@@ -90,17 +114,31 @@ export default function App() {
         return
       }
       const start = featured.find((p) => p.id === photoId) ?? featured[0]
+      rememberFocus()
       setOrigin(toFrameRect(rect))
       setViewer({ mode: 'album', photoId: start.id })
     },
-    [featured, say]
+    [featured, say, rememberFocus]
   )
 
   const openThrowback = () => {
     if (!throwback) return
+    rememberFocus()
     setOrigin(null)
     setViewer({ mode: 'throwback', photoId: throwback.photos[0].id })
   }
+
+  /**
+   * 关详情页只有一条路：先让 Viewer 自己淡出，淡完再走这里。
+   * 焦点趁这时候还给原来那张卡 —— 人是从那儿进来的，就该回到那儿。
+   */
+  const closeViewer = useCallback(() => {
+    setViewer(null)
+    setOrigin(null)
+    const back = returnFocus.current
+    returnFocus.current = null
+    if (back && document.contains(back)) back.focus({ preventScroll: true })
+  }, [])
 
   const dismissThrowback = () => {
     setThrowbackClosed(true)
@@ -204,8 +242,7 @@ export default function App() {
         <div className="top-actions">
           {!isRemote && (
             <span
-              className="ghost-btn"
-              style={{ cursor: 'default', fontSize: 11, letterSpacing: '0.12em' }}
+              className="ghost-btn badge-local"
               title="尚未配置 Supabase，数据只存在这台设备上"
             >
               本地模式
@@ -253,10 +290,7 @@ export default function App() {
             photos={sequence}
             index={index}
             onIndexChange={changeIndex}
-            onClose={() => {
-              setViewer(null)
-              setOrigin(null)
-            }}
+            onClose={closeViewer}
             onToggleFeatured={(p) => void toggleFeatured(p)}
             onSaveCaption={saveCaption}
             onDelete={(p) => void deletePhoto(p)}
@@ -299,7 +333,16 @@ export default function App() {
         onDone={(count) => say(`收进来 ${count} 张`)}
       />
 
-      {toast && <div className="toast">{toast}</div>}
+      {toastVisible.mounted && (
+        /* 读屏用户在星标失败、上传完成这些时刻听不到任何东西，除非有这个 */
+        <div
+          className={`toast${toastVisible.closing ? ' out' : ''}`}
+          role="status"
+          aria-live="polite"
+        >
+          {toast ?? lastToast.current}
+        </div>
+      )}
     </>
   )
 }

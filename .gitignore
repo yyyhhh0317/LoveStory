@@ -11,7 +11,7 @@ dist-ssr
 .idea/
 
 # 本地测试截图（Playwright 跑验证时产生，不入库）
-shots/
+.shots/
 
 # 本地随手放的笔记/草稿（不是 JetBrains 的 .idea）
 idea/
@@ -21,3 +21,6 @@ idea/
 
 # 一次性维护脚本的临时数据（supabase url/key 副本）
 .tmp/
+
+# 全量备份（含 caption 与留言，绝不入库）
+backups/

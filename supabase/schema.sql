@@ -69,6 +69,7 @@ on conflict (id) do update set public = true;
 
 drop policy if exists "photo objects readable"   on storage.objects;
 drop policy if exists "photo objects insertable" on storage.objects;
+drop policy if exists "photo objects updatable"  on storage.objects;
 
 create policy "photo objects readable"
   on storage.objects for select
@@ -76,4 +77,20 @@ create policy "photo objects readable"
 
 create policy "photo objects insertable"
   on storage.objects for insert
+  with check (bucket_id = 'photos');
+
+/*
+ * 覆盖写（x-upsert: true）走的是 update，只有 insert 策略会被 RLS 拒成
+ * 403 new row violates row-level security policy。
+ *
+ * 平时上传仍然是 upsert:false —— storage_key 是 UUID、同名必同内容，
+ * 所以 app 跑不到这条策略。它只为一次性维护脚本存在：
+ * scripts/recompress-photos.mjs 要把存量的 720/2048 两档压成 560/1800。
+ *
+ * 安全上和「insert 对所有人开放」是同一档次：这个站本来就不做鉴权，
+ * 匿名可上传、可改简介、可留言。多这一条不多开一个口子。
+ */
+create policy "photo objects updatable"
+  on storage.objects for update
+  using (bucket_id = 'photos')
   with check (bucket_id = 'photos');

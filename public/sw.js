@@ -25,9 +25,14 @@ const CORE = 'ls-core-' + VERSION
  * 图片缓存跨版本复用：storage_key 是 crypto.randomUUID()，
  * 上传用 upsert:false 且把 409 当成功 —— 同名对象永远不会有第二份内容，
  * 语义上等价于 immutable。每发一版就清空等于让用户重下一遍全部照片。
+ *
+ * **唯一的例外是存量重压。** 那个脚本会覆盖同名对象（见
+ * scripts/recompress-photos.mjs），从那一刻起「同名必有同内容」不再成立，
+ * 所以它必须同时把这里升到 v2 —— 否则 CacheFirst 会一直吐旧字节，
+ * 看起来像「压了个寂寞」。
  */
-const IMG_FULL = 'ls-img-full-v1'
-const IMG_THUMB = 'ls-img-thumb-v1'
+const IMG_FULL = 'ls-img-full-v2'
+const IMG_THUMB = 'ls-img-thumb-v2'
 /* 无界缓存是 SW 最常见的自伤：按条数封顶，别把浏览器的配额吃光 */
 const FULL_MAX = 60
 const THUMB_MAX = 200
@@ -50,10 +55,19 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      // 只清旧版本的 app shell，图片缓存刻意留着
+      /*
+       * 只清自己名下的旧桶：上一版的 app shell，以及被 bump 掉的图片版本。
+       *
+       * 图片桶平时跨版本留着（见上面的注释），但一旦换了版本号，旧桶就是纯垃圾 ——
+       * 它永远不会再被读到，而 Cache Storage 的配额是整站共享的。
+       * 必须连它一起删，否则存量重压之后旧图会一直占着几十兆。
+       */
+      const keep = new Set([CORE, IMG_FULL, IMG_THUMB])
       const names = await caches.keys()
       await Promise.all(
-        names.filter((n) => n.startsWith('ls-core-') && n !== CORE).map((n) => caches.delete(n))
+        names
+          .filter((n) => !keep.has(n) && (n.startsWith('ls-core-') || n.startsWith('ls-img-')))
+          .map((n) => caches.delete(n))
       )
     })()
   )

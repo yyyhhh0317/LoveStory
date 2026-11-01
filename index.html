@@ -19,6 +19,67 @@
         } catch (e) {}
       })()
     </script>
+    <!--
+      白屏看门狗。
+
+      典型死法：HTML 引用的 chunk 已经被后来的部署删掉，页面纯白、连 React 都
+      起不来，用户只能自己想到去硬刷新。GitHub Pages 的 HTML 有十分钟缓存、
+      assets 却是马上删的，这两件事撞上就会反复发生。
+
+      重载时给 URL 加一个 _r=1：既是「已经救过，别再试」的标记，也顺手让这次
+      导航变成一个缓存里没有的 URL，一定回源。
+
+      标记不放在 sessionStorage —— 隐私模式下 setItem 会抛异常，标记写不进去，
+      那就变成无限重载了。URL 参数不会失败。
+
+      只认 SCRIPT 与 stylesheet/modulepreload：favicon 和 manifest 挂了不算白屏，
+      不该为它们整页重来。
+    -->
+    <script>
+      (function () {
+        var RELOADED = new URL(location.href).searchParams.get('_r') === '1'
+
+        function fatal(el) {
+          if (!el) return false
+          if (el.tagName === 'SCRIPT') return true
+          if (el.tagName === 'LINK') {
+            var rel = (el.getAttribute('rel') || '').toLowerCase()
+            return rel === 'stylesheet' || rel === 'modulepreload'
+          }
+          return false
+        }
+
+        // 重载过还是不行：至少别留一片纯白，让人知道该刷新
+        function giveUp() {
+          document.body.innerHTML =
+            '<div style="font:15px/1.7 system-ui,sans-serif;color:#5c5148;padding:2.5em 1.5em">' +
+            '这会儿没能把页面取下来。<br>刷新一下，或者过一会儿再来。</div>'
+        }
+
+        window.addEventListener(
+          'error',
+          function (ev) {
+            if (!fatal(ev.target)) return
+            if (RELOADED) {
+              if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', giveUp)
+              } else {
+                giveUp()
+              }
+              return
+            }
+            RELOADED = true
+            // 等同一轮里其余资源也失败完再走，避免连跳几次
+            setTimeout(function () {
+              var u = new URL(location.href)
+              u.searchParams.set('_r', '1')
+              location.replace(u.toString())
+            }, 150)
+          },
+          true
+        )
+      })()
+    </script>
     <meta name="description" content="yyyhhh — 我们的照片，摊在时间里。" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="manifest" href="./manifest.webmanifest" />

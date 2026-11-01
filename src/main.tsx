@@ -7,6 +7,21 @@ import './index.css'
 const root = document.getElementById('root')
 if (!root) throw new Error('缺少 #root 节点')
 
+/*
+ * 清掉看门狗留下的 _r=1（见 index.html）。
+ *
+ * 能走到这里说明入口 chunk 都拿到了，那次救援已经成功，标记就该收回去 ——
+ * 否则 URL 会一直挂着一个没意义的参数，而且下一次真的白屏时会被当成
+ * 「已经救过」，直接放弃。
+ *
+ * 用 replaceState 而不是 location.replace：不新增历史记录，也不触发导航。
+ */
+if (location.search.includes('_r=1')) {
+  const url = new URL(location.href)
+  url.searchParams.delete('_r')
+  history.replaceState(null, '', url.pathname + url.search + url.hash)
+}
+
 createRoot(root).render(
   <StrictMode>
     <ErrorBoundary scope="page">

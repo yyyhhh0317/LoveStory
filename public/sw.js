@@ -73,11 +73,11 @@ self.addEventListener('activate', (event) => {
   )
 })
 
-async function fetchWithTimeout(request, ms) {
+async function fetchWithTimeout(request, ms, init = {}) {
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), ms)
   try {
-    return await fetch(request, { signal: ac.signal })
+    return await fetch(request, { ...init, signal: ac.signal })
   } finally {
     clearTimeout(timer)
   }
@@ -86,12 +86,21 @@ async function fetchWithTimeout(request, ms) {
 /**
  * 导航请求：网络优先，3.5 秒没回来就用缓存。
  * HTML 必须拿最新的，否则新部署的 hash 对不上，页面会去要已经删掉的 chunk。
+ *
+ * **必须 cache: 'no-store'。**
+ * GitHub Pages 给 HTML 的是 `Cache-Control: max-age=600`，普通 fetch 会直接
+ * 命中浏览器自己的 HTTP 缓存 —— SW 以为自己在联网，拿回来的却是十分钟前的
+ * 旧 HTML。那份 HTML 引用的 chunk 早被新部署覆盖掉了，于是整页白屏，
+ * 而且每次重开都是同一个结果（缓存没过期之前）。
+ *
+ * 这跟「SW 该不该更新」是两件事：SW 早就换新版了，问题在于新版去取 HTML 时
+ * 被浏览器缓存糊弄了。绕过它，缓存过期这个变量就彻底不存在了。
  */
 async function networkFirst(event) {
   const request = event.request
   const cache = await caches.open(CORE)
   try {
-    const res = await fetchWithTimeout(request, 3500)
+    const res = await fetchWithTimeout(request, 3500, { cache: 'no-store' })
     if (res && res.ok) {
       /*
        * 写缓存**不能 await**：await 意味着页面要等这一笔磁盘写完才开始解析 HTML。

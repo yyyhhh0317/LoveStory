@@ -169,12 +169,12 @@ export default function App() {
   }
 
   const heading = useMemo(() => {
-    if (route === 'board') return { title: '留言板', sub: '想说的话都放这儿' }
-    if (route === 'plans') return { title: '计划清单', sub: '还想一起做的事' }
+    if (route === 'board') return { title: '留言板', sub: '小嘴巴叭叭叭' }
+    if (route === 'plans') return { title: '计划清单', sub: '开始期待吧~' }
     if (album.phase === 'loading') return { title: '相册', sub: '正在翻开…' }
-    if (album.phase === 'error') return { title: '相册', sub: '暂时连不上' }
+    if (album.phase === 'error') return { title: '相册', sub: '暂时打不开' }
     if (!album.photos.length) return { title: '相册', sub: '还没有照片' }
-    return { title: '相册', sub: `${album.photos.length} 张` }
+    return { title: '相册', sub: `${album.photos.length} 张美照` }
   }, [route, album.phase, album.photos.length])
 
   return (
@@ -199,7 +199,7 @@ export default function App() {
                     disabled={album.phase !== 'ready'}
                   >
                     <PlusIcon size={15} />
-                    放照片
+                    加照片
                   </button>
                 ) : null
               }
@@ -266,7 +266,7 @@ export default function App() {
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         onSubmit={handleUpload}
-        onDone={(count) => say(`收进来 ${count} 张`)}
+        onDone={(count) => say(`收录 ${count} 张`)}
       />
 
       {toastVisible.mounted && (

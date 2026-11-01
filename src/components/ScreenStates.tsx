@@ -15,7 +15,7 @@ interface LoadingProps {
   variant?: 'page'
 }
 
-export function LoadingScreen({ label = '正在翻开', variant }: LoadingProps) {
+export function LoadingScreen({ label = '正在打开', variant }: LoadingProps) {
   return (
     <div
       className={`status-screen${variant === 'page' ? ' is-page' : ''}`}
@@ -64,7 +64,7 @@ export function ConnectFail({ error, retrying, onRetry, variant, title }: FailPr
           onClick={onRetry}
           disabled={retrying}
         >
-          {retrying ? '正在连…' : '再试一次'}
+          {retrying ? '正在连接…' : '再试一次'}
         </button>
 
         {error?.reason && <p className="status-reason">{error.reason}</p>}

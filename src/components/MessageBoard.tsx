@@ -158,12 +158,12 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span>
             {loading
-              ? '正在读…'
+              ? '正在加载…'
               : loadFailed
-                ? '没读出来'
+                ? '加载失败'
                 : messages.length > 0
                   ? `${messages.length} 条`
-                  : '还没有人说话'}
+                  : '还没有留言'}
           </span>
           <button
             type="button"
@@ -183,7 +183,7 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
 
         {!loading && loadFailed && (
           <div className="annot-empty">
-            这一页的留言没读出来
+            这一页的留言加载失败
             <br />
             <button
               type="button"
@@ -197,9 +197,9 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
 
         {!loading && !loadFailed && messages.length === 0 && (
           <div className="annot-empty">
-            这一张还没有留言
+            这一张还没有人留言
             <br />
-            说点什么吧，谁都看不见你是谁
+            说点什么吧~
           </div>
         )}
 
@@ -233,7 +233,7 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
           ref={areaRef}
           value={draft}
           maxLength={MAX_LEN}
-          placeholder="留一句给这张照片…"
+          placeholder="给这张照片留句话吧~"
           onChange={(e) => {
             setDraft(e.target.value)
             const el = e.currentTarget
@@ -249,7 +249,7 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
         />
         <div className="row">
           <span className="hint">
-            {draft.length > 0 ? `${draft.length} / ${MAX_LEN}` : '匿名 · ⌘↵ 发送'}
+            {draft.length > 0 ? `${draft.length} / ${MAX_LEN}` : '匿名'}
           </span>
           <button
             type="button"
@@ -257,7 +257,7 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
             disabled={!draft.trim() || sending}
             onClick={() => void submit()}
           >
-            {sending ? '贴着…' : '贴上'}
+            {sending ? '上传中…' : '成功~'}
           </button>
         </div>
       </div>

@@ -132,7 +132,7 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
       setItems((prev) => prev.filter((it) => failedKeys.has(it.key)))
       setError(
         created.length
-          ? `收进来 ${created.length} 张，还有 ${failed.length} 张没上去。再点一次「收进来」接着传就好。`
+          ? `成功上传 ${created.length} 张，还有 ${failed.length} 张没上传。再点一次「收进来」接着传就好啦`
           : `这 ${failed.length} 张都没传上去，可能是网络断了，再点一次试试。`
       )
     } catch (err) {
@@ -152,7 +152,7 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
       <div className="sheet" role="dialog" aria-modal="true" aria-label="上传照片">
         <div className="sheet-head">
           <div>
-            <h2>收进相册</h2>
+            <h2>加入相册</h2>
             <p>
               照片会在本地压成两档再上传，原图不上传，所以能存很久。
               <br />
@@ -259,7 +259,7 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
 
         <div className="sheet-foot">
           <span className="tip">
-            {remaining > 0 ? `已就绪 ${remaining} 张` : '一次可以放很多张，慢慢来'}
+            {remaining > 0 ? `已就绪 ${remaining} 张` : '一次可以放很多张'}
           </span>
           <div className="actions">
             <button type="button" className="text-btn" onClick={onClose}>
@@ -271,7 +271,7 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
               disabled={!remaining || busy}
               onClick={() => void submit()}
             >
-              {busy && remaining ? '正在上传' : `收进来${remaining ? `（${remaining}）` : ''}`}
+              {busy && remaining ? '正在上传' : `加入相册${remaining ? `（${remaining}）` : ''}`}
             </button>
           </div>
         </div>

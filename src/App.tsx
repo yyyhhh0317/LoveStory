@@ -18,7 +18,12 @@ import { usePresence } from './lib/presence'
 import { useScrollLock } from './lib/scrollLock'
 import type { NewPhotoInput, Photo } from './lib/types'
 
-const THEME_KEY = 'yyyhhh:theme'
+/**
+ * key 带 v2：默认主题从奶油换成莓奶那一刻，旧偏好必须作废。
+ * 不改 key 的话，自己这台设备会一直按旧记录停在奶油上 ——
+ * 改了默认值却「看起来没生效」，是最容易浪费半小时的那种坑。
+ */
+const THEME_KEY = 'yyyhhh:theme:v2'
 /** 记住最近一次关掉「那年今日」的日期，同一天不再打扰 */
 const THROWBACK_KEY = 'yyyhhh:throwback'
 
@@ -29,7 +34,7 @@ export default function App() {
   const [route, navigate] = useRoute()
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem(THEME_KEY)
-    return saved === 'blush' ? 'blush' : 'cream'
+    return saved === 'cream' ? 'cream' : 'blush'
   })
   const [uploadOpen, setUploadOpen] = useState(false)
   const [viewer, setViewer] = useState<{ mode: ViewerMode; photoId: string } | null>(null)

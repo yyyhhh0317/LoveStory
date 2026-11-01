@@ -2229,9 +2229,9 @@ html[data-scroll='locked'] .page-scroll {
 
 .timer-kicker {
   margin: 0;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-read);
   letter-spacing: var(--ls-display);
-  color: var(--ink-faint);
+  color: var(--ink-soft);
 }
 
 .timer-row {

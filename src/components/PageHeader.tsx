@@ -21,17 +21,17 @@ export function ThemeSwitch({ theme, onTheme, className }: Props) {
     >
       <button
         type="button"
-        className={theme === 'cream' ? 'on' : ''}
-        onClick={() => onTheme('cream')}
-      >
-        奶油
-      </button>
-      <button
-        type="button"
         className={theme === 'blush' ? 'on' : ''}
         onClick={() => onTheme('blush')}
       >
         莓奶
+      </button>
+      <button
+        type="button"
+        className={theme === 'cream' ? 'on' : ''}
+        onClick={() => onTheme('cream')}
+      >
+        奶油
       </button>
     </div>
   )

@@ -23,10 +23,19 @@ const LOAD_TIMEOUT_MS = 15000
  * 一样就不换数组 —— CanvasWall 的 layoutTimeline 以 photos 引用为依赖，
  * PhotoCard 又以 placed 引用做 memo 比较，一次「什么都没变」的后台刷新
  * 会白白重渲染同屏三十几张卡片。
+ *
+ * **必须包含 storageKey。**
+ * 图片地址是拿它拼的，它一变，同一个 id 指向的就是另一个文件。
+ * 漏掉它的后果不是「少一次重渲染」，而是：重压换 key 之后签名照样相等，
+ * 新的 photos 被当成「什么都没变」丢掉，界面继续拿旧 key 拼 URL 去请求
+ * 已经被删掉的对象 —— 满屏 400，而且因为 photos 引用没变，写回缓存那条
+ * effect 也不会触发，脏快照会一直留着，自己不会好。
  */
 function photoSig(list: Photo[]): string {
   let s = ''
-  for (const p of list) s += `${p.id}:${p.takenAt}:${p.caption ?? ''}:${p.featuredAt ?? ''}|`
+  for (const p of list) {
+    s += `${p.id}:${p.storageKey}:${p.takenAt}:${p.caption ?? ''}:${p.featuredAt ?? ''}|`
+  }
   return s
 }
 

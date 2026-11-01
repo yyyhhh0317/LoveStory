@@ -2220,13 +2220,6 @@ html[data-scroll='locked'] .page-scroll {
   text-align: right;
 }
 
-.tl-date-year {
-  font-size: var(--fs-micro);
-  letter-spacing: var(--ls-num);
-  color: var(--ink-faint);
-  font-variant-numeric: tabular-nums;
-}
-
 .tl-date-main {
   font-family: var(--font-serif);
   font-size: var(--fs-ui);

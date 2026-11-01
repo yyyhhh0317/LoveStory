@@ -120,9 +120,6 @@ export function AlbumPage({
             <div className="tl-timeline">
               {groups.map((group, gi) => {
                 const photosRight = gi % 2 === 0
-                const prev = gi > 0 ? groups[gi - 1] : null
-                /* 年份只在换年那一行出现，否则每行都重复一遍太吵 */
-                const showYear = group.year > 0 && (!prev || prev.year !== group.year)
 
                 return (
                   <section
@@ -130,11 +127,11 @@ export function AlbumPage({
                     className={`tl-day${photosRight ? '' : ' tl-day--flip'}`}
                   >
                     <div className="tl-date">
-                      {showYear && <span className="tl-date-year">{group.year}</span>}
                       {group.month > 0 ? (
                         <>
+                          {/* 年份每天都写：横跨两年，光靠换年的分隔处会数不清 */}
                           <span className="tl-date-main">
-                            {group.month} 月 {group.dayOfMonth} 日
+                            {group.year} 年 {group.month} 月 {group.dayOfMonth} 日
                           </span>
                           <span className="tl-date-meta">
                             {group.photos.length > 1

@@ -30,7 +30,7 @@ export const TimelineItem = memo(function TimelineItem({
   return (
     <button
       type="button"
-      className={`tl-item${photo.featuredAt ? ' is-featured' : ''}`}
+      className="tl-item"
       onClick={() => {
         /*
          * 把照片此刻在屏幕上的位置交出去，详情页据此从这里放大过去。

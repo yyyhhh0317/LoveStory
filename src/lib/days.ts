@@ -71,3 +71,25 @@ export function groupByDay(photos: Photo[], dir: 'desc' | 'asc' = 'desc'): DayGr
 export function flattenGroups(groups: DayGroup[]): Photo[] {
   return groups.flatMap((g) => g.photos)
 }
+
+/**
+ * 星标照片，按「被收藏的时间」升序。
+ *
+ * 注意排的是 featuredAt 而不是 takenAt：这描述的是你一张张攒下来的顺序，
+ * 收藏顺序才是你挑它的顺序。画布时代的中心相册用的就是这条规则
+ * （原 lib/layout.ts 的 albumOrder），画布下线时一起没了，这里补回来。
+ *
+ * 收藏时间缺失或坏掉的扔到最后，别让一条坏数据插到最前面。
+ */
+export function starredOrder(photos: Photo[]): Photo[] {
+  const at = (p: Photo) => (p.featuredAt ? new Date(p.featuredAt).getTime() : NaN)
+  return photos
+    .filter((p) => Boolean(p.featuredAt))
+    .sort((a, b) => {
+      const ta = at(a)
+      const tb = at(b)
+      if (Number.isNaN(ta)) return 1
+      if (Number.isNaN(tb)) return -1
+      return ta - tb
+    })
+}

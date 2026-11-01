@@ -11,7 +11,7 @@ import { PlansPage } from './components/pages/PlansPage'
 import { PlusIcon } from './components/icons'
 import { useAlbum } from './hooks/useAlbum'
 import { useRoute } from './hooks/useRoute'
-import { flattenGroups, groupByDay } from './lib/days'
+import { flattenGroups, groupByDay, starredOrder } from './lib/days'
 import { findThrowback, todayKey } from './lib/throwback'
 import { toFrameRect, type FrameRect } from './lib/flight'
 import { usePresence } from './lib/presence'
@@ -21,7 +21,7 @@ import type { NewPhotoInput, Photo } from './lib/types'
 /** 记住最近一次关掉「那年今日」的日期，同一天不再打扰 */
 const THROWBACK_KEY = 'yyyhhh:throwback'
 
-type ViewerMode = 'timeline' | 'throwback'
+type ViewerMode = 'timeline' | 'throwback' | 'starred'
 
 export default function App() {
   const album = useAlbum()
@@ -72,9 +72,19 @@ export default function App() {
   /** 展平 = 屏幕从上到下的顺序，沉浸视图的左右翻页直接用它 */
   const timeline = useMemo(() => flattenGroups(groups), [groups])
   const throwback = useMemo(() => findThrowback(album.photos), [album.photos])
+  const starred = useMemo(() => starredOrder(album.photos), [album.photos])
 
+  /*
+   * 详情页翻的是「你从哪儿点进来的那串照片」。
+   * 星标视图点开就只在星标里翻 —— 否则用户明明在收藏集里，
+   * 左右划两下却滑进了没收藏的照片，那个「集子」就不成立了。
+   */
   const sequence =
-    viewer?.mode === 'throwback' ? (throwback?.photos ?? []) : timeline
+    viewer?.mode === 'throwback'
+      ? (throwback?.photos ?? [])
+      : viewer?.mode === 'starred'
+        ? starred
+        : timeline
   const index = viewer ? Math.max(0, sequence.findIndex((p) => p.id === viewer.photoId)) : 0
 
   /* 弹层打开时锁住页面滚动。用计数器的版本，两个弹层叠加也不会提前解锁 */
@@ -91,10 +101,14 @@ export default function App() {
    * 整条时间轴会全部重渲染一遍。
    */
   const openPhoto = useCallback(
-    (photo: Photo, rect: DOMRect | null = null) => {
+    (
+      photo: Photo,
+      rect: DOMRect | null = null,
+      from: 'timeline' | 'starred' = 'timeline'
+    ) => {
       rememberFocus()
       setOrigin(toFrameRect(rect))
-      setViewer({ mode: 'timeline', photoId: photo.id })
+      setViewer({ mode: from, photoId: photo.id })
     },
     [rememberFocus]
   )

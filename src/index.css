@@ -1933,6 +1933,84 @@ html[data-scroll='locked'] .page-scroll {
   padding: 0 var(--sp-5);
 }
 
+/*
+ * 全部 / 星标 两档切换。
+ *
+ * 用 aria-pressed 而不是另加 .on 类：开关状态本来就在无障碍树里，
+ * 样式跟着它走，省一处"忘了同步"的可能。
+ */
+.tl-switch {
+  display: flex;
+  gap: var(--sp-1);
+  width: fit-content;
+  margin: var(--sp-3) 0;
+  padding: var(--sp-1);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+}
+
+.tl-switch-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--h-md);
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-meta);
+  letter-spacing: var(--ls-meta);
+  color: var(--ink-faint);
+  transition: color var(--dur-2) var(--ease), background-color var(--dur-2) var(--ease);
+}
+
+.tl-switch-btn[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tl-switch-btn[aria-pressed='false']:hover {
+    color: var(--ink-soft);
+  }
+}
+
+/* 数量跟在字后面，小一号、不抢视线；选中时跟着变金 */
+.tl-switch-n {
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-num);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  transition: color var(--dur-2) var(--ease);
+}
+
+.tl-switch-btn[aria-pressed='true'] .tl-switch-n {
+  color: var(--accent);
+}
+
+/*
+ * 星标视图：一格格铺开的收藏，不走中轴。
+ * 顺序按被收藏的时间，和拍摄时间无关 —— 见 AlbumPage 里的 starredOrder。
+ *
+ * 下限取 138px 而不是 148：320px 的老机型上也保得住两列。
+ * 一列的照片墙一屏只有一张，滚动起来不像一本集子。
+ */
+.tl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-8);
+}
+
+/* 网格里每格宽度由列决定，不能沿用时间轴那条 200px 上限，否则右侧留白 */
+.tl-grid .tl-item {
+  max-width: none;
+}
+
+/* 这里每一张都是星标，角落那枚小星星不再提供任何信息 */
+.tl-grid .tl-star {
+  display: none;
+}
+
 .tl-timeline {
   /* 这两个是对象尺寸（轴线宽 / 格子最大边），不是间距，不进 --sp-* */
   --tl-axis: 24px;

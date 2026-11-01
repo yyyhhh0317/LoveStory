@@ -1,19 +1,30 @@
 import type { FriendlyError } from '../lib/errors'
 
 /**
- * 「加载中」与「连接失败」两个整屏状态。
+ * 「加载中」与「连接失败」两个状态。
  *
- * 存在的唯一目的：让「读不到」在视觉上和「真的没有照片」彻底分开。
- * 后者用的是画布自己的空态（中间那本相册 + 「还什么都没有」），
- * 这里绝不能出现任何与「空」有关的措辞。
+ * 存在的唯一目的：让「读不到」在视觉上和「真的没有」彻底分开。
+ * 空态是页面自己的事（"还什么都没有"），这里绝不能出现任何与「空」有关的措辞。
+ *
+ * variant='page'：贴进 .page-scroll 里当内容，不再 fixed 盖住整屏 ——
+ * 一页读不出来时，页头和底部导航还得能用。
  */
 
-export function LoadingScreen() {
+interface LoadingProps {
+  label?: string
+  variant?: 'page'
+}
+
+export function LoadingScreen({ label = '正在翻开', variant }: LoadingProps) {
   return (
-    <div className="status-screen" role="status" aria-live="polite">
+    <div
+      className={`status-screen${variant === 'page' ? ' is-page' : ''}`}
+      role="status"
+      aria-live="polite"
+    >
       <div className="status-loading">
         <span className="status-line" />
-        <p>正在翻开相册</p>
+        <p>{label}</p>
       </div>
     </div>
   )
@@ -23,18 +34,23 @@ interface FailProps {
   error: FriendlyError | null
   retrying: boolean
   onRetry: () => void
+  variant?: 'page'
+  title?: string
 }
 
-export function ConnectFail({ error, retrying, onRetry }: FailProps) {
+export function ConnectFail({ error, retrying, onRetry, variant, title }: FailProps) {
   return (
-    <div className="status-screen" role="alert">
+    <div
+      className={`status-screen${variant === 'page' ? ' is-page' : ''}`}
+      role="alert"
+    >
       <div className="status-card">
         <div className="status-badge">
           <span className="status-dot" />
           没连上
         </div>
 
-        <h2>相册暂时没打开</h2>
+        <h2>{title ?? '相册暂时没打开'}</h2>
 
         <p>
           照片都还在，只是这会儿读不到。

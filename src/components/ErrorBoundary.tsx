@@ -6,15 +6,16 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
  * React 的错误边界必须是 class —— 没有 hooks 版本，这是它唯一的硬约束。
  *
  * 分三处挂载，粒度不同，出事的后果也不同：
- *   page   —— 兜住整个 App，最后一道防线
- *   canvas —— 兜住画布。照片数据在 App 里，画布炸了顶栏和上传仍然可用
- *   viewer —— 兜住沉浸视图。一张照片打不开不该把人赶回白屏
+ *   page    —— 兜住整个 App，最后一道防线
+ *   section —— 兜住当前这一页的内容区。页头和底部导航是 App 直接渲染的，
+ *              所以一页炸了，另外两页还能去
+ *   viewer  —— 兜住沉浸视图。一张照片打不开不该把人赶回白屏
  *
  * 文案刻意不提「错误」「异常」「崩溃」，只说「没画出来」。
  * 因为使用者关心的不是出了什么错，而是「我的照片还在不在」。
  */
 
-type Scope = 'page' | 'canvas' | 'viewer'
+type Scope = 'page' | 'section' | 'viewer'
 
 interface Props {
   children: ReactNode
@@ -51,14 +52,14 @@ const COPY: Record<Scope, { badge: string; title: string; body: ReactNode }> = {
       </>
     ),
   },
-  canvas: {
-    badge: '画布没画出来',
-    title: '这一圈没摆好',
+  section: {
+    badge: '没画出来',
+    title: '这一页没排好',
     body: (
       <>
-        照片还在，只是画布这次没排好。
+        内容都还在，一条都没丢。
         <br />
-        可以让它重摆一次；上面那排按钮也都还能用。
+        可以让它重摆一次；底下那排导航也都还能用。
       </>
     ),
   },
@@ -69,7 +70,7 @@ const COPY: Record<Scope, { badge: string; title: string; body: ReactNode }> = {
       <>
         别的照片都还在。
         <br />
-        关掉这一页，回画布上再挑一张就好。
+        关掉这一页，回相册里再挑一张就好。
       </>
     ),
   },
@@ -131,7 +132,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <div
         className={`status-screen${scope === 'viewer' ? ' is-overlay' : ''}${
-          scope === 'canvas' ? ' is-inline' : ''
+          scope === 'section' ? ' is-page' : ''
         }`}
         role="alert"
       >

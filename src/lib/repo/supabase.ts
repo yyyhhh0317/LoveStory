@@ -1,5 +1,13 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ImageVariant, Message, NewPhotoInput, Photo, Repo } from '../types'
+import type {
+  BoardMessage,
+  ImageVariant,
+  Message,
+  NewPhotoInput,
+  Photo,
+  Plan,
+  Repo,
+} from '../types'
 
 const BUCKET = 'photos'
 
@@ -56,6 +64,39 @@ const toMessage = (row: MessageRow): Message => ({
   createdAt: row.created_at,
   deletedAt: row.deleted_at,
 })
+
+interface BoardRow {
+  id: string
+  content: string
+  created_at: string
+  deleted_at: string | null
+}
+
+interface PlanRow {
+  id: string
+  title: string
+  done_at: string | null
+  created_at: string
+  deleted_at: string | null
+}
+
+const toBoard = (row: BoardRow): BoardMessage => ({
+  id: row.id,
+  content: row.content,
+  createdAt: row.created_at,
+  deletedAt: row.deleted_at,
+})
+
+const toPlan = (row: PlanRow): Plan => ({
+  id: row.id,
+  title: row.title,
+  doneAt: row.done_at,
+  createdAt: row.created_at,
+  deletedAt: row.deleted_at,
+})
+
+/** 两个人的板子，一年也就几千条。300 条封顶，不让 payload 无界 */
+const BOARD_LIMIT = 300
 
 export class SupabaseRepo implements Repo {
   kind = 'supabase' as const
@@ -198,6 +239,65 @@ export class SupabaseRepo implements Repo {
       .single()
     if (error) throw error
     return toMessage(data as MessageRow)
+  }
+
+  async listBoardMessages(signal?: AbortSignal): Promise<BoardMessage[]> {
+    const query = this.client
+      .from('board_messages')
+      .select('id,content,created_at,deleted_at')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(BOARD_LIMIT)
+    const { data, error } = await (signal ? query.abortSignal(signal) : query)
+    if (error) throw error
+    return (data as BoardRow[]).map(toBoard)
+  }
+
+  async createBoardMessage(content: string): Promise<BoardMessage> {
+    const { data, error } = await this.client
+      .from('board_messages')
+      .insert({ content })
+      .select('id,content,created_at,deleted_at')
+      .single()
+    if (error) throw error
+    return toBoard(data as BoardRow)
+  }
+
+  async listPlans(signal?: AbortSignal): Promise<Plan[]> {
+    // 未完成和已完成一次拿全，分组在客户端做 —— 两张列表加起来才几十行
+    const query = this.client
+      .from('plans')
+      .select('id,title,done_at,created_at,deleted_at')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: true })
+    const { data, error } = await (signal ? query.abortSignal(signal) : query)
+    if (error) throw error
+    return (data as PlanRow[]).map(toPlan)
+  }
+
+  async createPlan(title: string): Promise<Plan> {
+    const { data, error } = await this.client
+      .from('plans')
+      .insert({ title })
+      .select('id,title,done_at,created_at,deleted_at')
+      .single()
+    if (error) throw error
+    return toPlan(data as PlanRow)
+  }
+
+  async setPlanDone(id: string, done: boolean): Promise<void> {
+    /*
+     * 必须 .select('id')：RLS 没配 update 策略时，PostgREST 的 update 会返回
+     * 204 且不带任何错误，界面就会以为勾上了、刷新才发现没存。
+     * 拿回被改的行数，才是「真的写进去了」的唯一证据。
+     */
+    const { data, error } = await this.client
+      .from('plans')
+      .update({ done_at: done ? new Date().toISOString() : null })
+      .eq('id', id)
+      .select('id')
+    if (error) throw error
+    if (!data?.length) throw new Error('计划状态没写进去（plans 表缺少 update 策略？）')
   }
 
   peekUrl(storageKey: string, variant: ImageVariant): string | null {

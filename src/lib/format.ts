@@ -1,4 +1,4 @@
-const pad = (n: number) => String(n).padStart(2, '0')
+export const pad = (n: number) => String(n).padStart(2, '0')
 
 export function formatDay(iso: string): string {
   const d = new Date(iso)

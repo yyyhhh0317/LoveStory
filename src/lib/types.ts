@@ -22,6 +22,27 @@ export interface Message {
   deletedAt: string | null
 }
 
+/**
+ * 站级留言：不挂在任何一张照片上。
+ * 和 Message 是两张表、两套语义 —— Message 是「这一张照片下面说的话」，
+ * BoardMessage 是「平时想说的话」。别把它们合并。
+ */
+export interface BoardMessage {
+  id: string
+  content: string
+  createdAt: string
+  deletedAt: string | null
+}
+
+export interface Plan {
+  id: string
+  title: string
+  /** 非空 = 已完成。用时间戳而不是布尔，和 photos.featured_at 同一套约定 */
+  doneAt: string | null
+  createdAt: string
+  deletedAt: string | null
+}
+
 export interface NewPhotoInput {
   storageKey: string
   width: number
@@ -45,6 +66,16 @@ export interface Repo {
   peekUrl(storageKey: string, variant: ImageVariant): string | null
   /** 取地址，需要时异步加载 */
   resolveUrl(storageKey: string, variant: ImageVariant): Promise<string>
+
+  /* ---------- 站级留言板 ---------- */
+  /** 按时间倒序，最新在最前 */
+  listBoardMessages(signal?: AbortSignal): Promise<BoardMessage[]>
+  createBoardMessage(content: string): Promise<BoardMessage>
+
+  /* ---------- 计划清单 ---------- */
+  listPlans(signal?: AbortSignal): Promise<Plan[]>
+  createPlan(title: string): Promise<Plan>
+  setPlanDone(id: string, done: boolean): Promise<void>
 }
 
 export type ImageVariant = 'thumb' | 'full'

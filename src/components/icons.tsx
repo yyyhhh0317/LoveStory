@@ -101,3 +101,23 @@ export function CheckIcon({ size = 16, className }: IconProps) {
     </svg>
   )
 }
+
+export function PhotoIcon({ size = 20, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className} aria-hidden="true">
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <circle cx="8.6" cy="9.6" r="1.4" />
+      <path d="M4.4 16.6l4.3-4 3.3 3 2.6-2.3 4.9 4.4" />
+    </svg>
+  )
+}
+
+export function ListIcon({ size = 20, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className} aria-hidden="true">
+      <path d="M4 7.2l1.9 1.9L9 5.9" />
+      <path d="M4 15.2l1.9 1.9L9 13.9" />
+      <path d="M12.5 7.5H20M12.5 15.5H20" />
+    </svg>
+  )
+}

@@ -1,8 +1,18 @@
-import type { ImageVariant, Message, NewPhotoInput, Photo, Repo } from '../types'
+import type {
+  BoardMessage,
+  ImageVariant,
+  Message,
+  NewPhotoInput,
+  Photo,
+  Plan,
+  Repo,
+} from '../types'
 import { uid } from '../format'
 
 const PHOTOS_KEY = 'yyyhhh:photos:v1'
 const MESSAGES_KEY = 'yyyhhh:messages:v1'
+const BOARD_KEY = 'yyyhhh:board:v1'
+const PLANS_KEY = 'yyyhhh:plans:v1'
 const DB_NAME = 'yyyhhh-files'
 const STORE = 'files'
 
@@ -159,6 +169,53 @@ export class LocalRepo implements Repo {
     all.push(message)
     writeJson(MESSAGES_KEY, all)
     return message
+  }
+
+  async listBoardMessages(_signal?: AbortSignal): Promise<BoardMessage[]> {
+    return readJson<BoardMessage[]>(BOARD_KEY, [])
+      .filter((m) => !m.deletedAt)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  }
+
+  async createBoardMessage(content: string): Promise<BoardMessage> {
+    const message: BoardMessage = {
+      id: uid(),
+      content,
+      createdAt: new Date().toISOString(),
+      deletedAt: null,
+    }
+    const all = readJson<BoardMessage[]>(BOARD_KEY, [])
+    all.push(message)
+    writeJson(BOARD_KEY, all)
+    return message
+  }
+
+  async listPlans(_signal?: AbortSignal): Promise<Plan[]> {
+    return readJson<Plan[]>(PLANS_KEY, [])
+      .filter((p) => !p.deletedAt)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  }
+
+  async createPlan(title: string): Promise<Plan> {
+    const plan: Plan = {
+      id: uid(),
+      title,
+      doneAt: null,
+      createdAt: new Date().toISOString(),
+      deletedAt: null,
+    }
+    const all = readJson<Plan[]>(PLANS_KEY, [])
+    all.push(plan)
+    writeJson(PLANS_KEY, all)
+    return plan
+  }
+
+  async setPlanDone(id: string, done: boolean): Promise<void> {
+    const all = readJson<Plan[]>(PLANS_KEY, [])
+    const next = all.map((p) =>
+      p.id === id ? { ...p, doneAt: done ? new Date().toISOString() : null } : p
+    )
+    writeJson(PLANS_KEY, next)
   }
 
   peekUrl(storageKey: string, variant: ImageVariant): string | null {

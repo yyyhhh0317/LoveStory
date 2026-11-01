@@ -73,11 +73,21 @@ const supabase = createClient(url.replace(/\/$/, ''), key, {
 
 console.log('\n  检查数据库\n')
 
-for (const table of ['photos', 'messages']) {
-  const { error } = await supabase.from(table).select('*', { count: 'exact', head: true })
+/*
+ * 不能用 select('*', { head: true }) 探活：
+ * PostgREST 在没有响应体时连「表不存在」都不报，会一路绿灯。
+ * 拿一行真数据（limit 1）才问得出实话。
+ */
+for (const table of ['photos', 'messages', 'board_messages', 'plans']) {
+  const { error } = await supabase.from(table).select('id').limit(1)
   if (error) {
-    if (error.code === '42P01') {
-      fail(`表 ${table} 不存在`, '到 SQL Editor 里执行 supabase/schema.sql')
+    if (error.code === '42P01' || error.code === 'PGRST205') {
+      fail(
+        `表 ${table} 不存在`,
+        table === 'board_messages' || table === 'plans'
+          ? 'schema.sql 末尾那段「2026-11 · 站级留言板 + 计划清单」需要单独执行一次'
+          : '到 SQL Editor 里执行 supabase/schema.sql'
+      )
     } else if (error.code === '42501' || /permission denied|row-level security/i.test(error.message)) {
       fail(`表 ${table} 存在但读不了`, 'RLS 策略没有建好，重新执行 schema.sql 里的 policy 部分')
     } else {

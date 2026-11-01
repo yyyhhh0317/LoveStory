@@ -94,3 +94,76 @@ create policy "photo objects updatable"
   on storage.objects for update
   using (bucket_id = 'photos')
   with check (bucket_id = 'photos');
+
+
+-- ============================================================
+-- 2026-11 · 站级留言板 + 计划清单
+--
+-- 这一段是后加的，可以单独复制粘贴执行（幂等）。
+-- 与上面两张表的关系：
+--   · messages 是「某一张照片下面说的话」（photo_id 必填）
+--   · board_messages 是「平时想说的话」，不挂在照片上
+--   · plans 是「还想一起做的事」
+-- 三张表都只读窗口 + 写入，一律没有 delete 策略（删不掉，只能软删）。
+-- ============================================================
+
+-- ---------- 站级留言板 ----------
+create table if not exists public.board_messages (
+  id          uuid primary key default gen_random_uuid(),
+  content     text not null check (char_length(content) between 1 and 300),
+  created_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+
+-- 列表是 created_at 倒序读，只读未删的
+create index if not exists board_messages_created_idx
+  on public.board_messages (created_at desc)
+  where deleted_at is null;
+
+-- ---------- 计划清单 ----------
+create table if not exists public.plans (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null check (char_length(btrim(title)) between 1 and 120),
+  done_at     timestamptz,          -- 非空 = 已完成（和 photos.featured_at 同一套约定）
+  created_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+
+create index if not exists plans_open_idx
+  on public.plans (created_at)
+  where done_at is null and deleted_at is null;
+
+create index if not exists plans_done_idx
+  on public.plans (done_at desc)
+  where done_at is not null and deleted_at is null;
+
+-- ---------- 行级安全 ----------
+alter table public.board_messages enable row level security;
+alter table public.plans          enable row level security;
+
+drop policy if exists "board readable"   on public.board_messages;
+drop policy if exists "board insertable" on public.board_messages;
+
+create policy "board readable"   on public.board_messages for select using (true);
+create policy "board insertable" on public.board_messages for insert with check (true);
+-- 刻意不加 update：留言写了就是写了，和 messages 表口径一致
+
+drop policy if exists "plans readable"   on public.plans;
+drop policy if exists "plans insertable" on public.plans;
+drop policy if exists "plans updatable"  on public.plans;
+
+create policy "plans readable"   on public.plans for select using (true);
+create policy "plans insertable" on public.plans for insert with check (true);
+
+/*
+ * 这条是功能必需品，不是可选项。
+ * 勾选 / 取消勾选都是 update —— 缺了它，PostgREST 会返回 204 且不报错，
+ * 界面以为勾上了，刷新才发现没存。仓储层的 setPlanDone 用 .select('id')
+ * 反查行数来把这种情况变成显式报错。
+ */
+create policy "plans updatable"  on public.plans for update using (true) with check (true);
+
+-- 可选：塞几条起始事项。不想要就整行注释掉
+-- insert into public.plans (title) values
+--   ('去英国旅行'), ('一起看一次极光'), ('养一只猫');
+

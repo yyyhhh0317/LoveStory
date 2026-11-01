@@ -20,9 +20,9 @@ const LOAD_TIMEOUT_MS = 15000
 
 /**
  * 内容签名：判断「刷新回来的东西和手上的一不一样」。
- * 一样就不换数组 —— CanvasWall 的 layoutTimeline 以 photos 引用为依赖，
- * PhotoCard 又以 placed 引用做 memo 比较，一次「什么都没变」的后台刷新
- * 会白白重渲染同屏三十几张卡片。
+ * 一样就不换数组 —— 时间轴以 photos 引用为依赖重排分组，
+ * TimelineItem 又以 photo 引用做 memo 比较，一次「什么都没变」的后台刷新
+ * 会白白重渲染整条时间轴。
  *
  * **必须包含 storageKey。**
  * 图片地址是拿它拼的，它一变，同一个 id 指向的就是另一个文件。

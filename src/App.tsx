@@ -3,7 +3,7 @@ import { Viewer } from './components/Viewer'
 import { UploadSheet } from './components/UploadSheet'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { BottomNav } from './components/BottomNav'
-import { PageHeader, ThemeSwitch, type Theme } from './components/PageHeader'
+import { PageHeader } from './components/PageHeader'
 import { HomePage } from './components/pages/HomePage'
 import { AlbumPage } from './components/pages/AlbumPage'
 import { BoardPage } from './components/pages/BoardPage'
@@ -18,12 +18,6 @@ import { usePresence } from './lib/presence'
 import { useScrollLock } from './lib/scrollLock'
 import type { NewPhotoInput, Photo } from './lib/types'
 
-/**
- * key 带 v2：默认主题从奶油换成莓奶那一刻，旧偏好必须作废。
- * 不改 key 的话，自己这台设备会一直按旧记录停在奶油上 ——
- * 改了默认值却「看起来没生效」，是最容易浪费半小时的那种坑。
- */
-const THEME_KEY = 'yyyhhh:theme:v2'
 /** 记住最近一次关掉「那年今日」的日期，同一天不再打扰 */
 const THROWBACK_KEY = 'yyyhhh:throwback'
 
@@ -32,10 +26,6 @@ type ViewerMode = 'timeline' | 'throwback'
 export default function App() {
   const album = useAlbum()
   const [route, navigate] = useRoute()
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem(THEME_KEY)
-    return saved === 'cream' ? 'cream' : 'blush'
-  })
   const [uploadOpen, setUploadOpen] = useState(false)
   const [viewer, setViewer] = useState<{ mode: ViewerMode; photoId: string } | null>(null)
   /* 点开时那张缩略图在屏幕上的位置，交给沉浸视图做放大动画 */
@@ -65,15 +55,6 @@ export default function App() {
     returnFocus.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null
   }, [])
-
-  useEffect(() => {
-    /* index.html 里的内联脚本已经在首帧前设过一遍；这里重设一次是防御性的，
-       万一 localStorage 被禁用、脚本没跑成，也不至于停在默认的奶油上 */
-    document.documentElement.dataset.theme = theme
-    localStorage.setItem(THEME_KEY, theme)
-    const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', theme === 'blush' ? '#fdf1f2' : '#f9f2e8')
-  }, [theme])
 
   /** 失败提示比成功提示多留一会儿，因为要看清的是「需要再做什么」 */
   const say = useCallback((text: string, ms = 2600) => {
@@ -202,7 +183,7 @@ export default function App() {
 
       <div className="app-shell">
         {route === 'home' ? (
-          <HomePage theme={theme} onTheme={setTheme} />
+          <HomePage />
         ) : (
           <div className="page">
             <PageHeader
@@ -210,20 +191,17 @@ export default function App() {
               sub={heading.sub}
               onHome={() => navigate('home')}
               action={
-                <>
-                  <ThemeSwitch theme={theme} onTheme={setTheme} />
-                  {route === 'album' && (
-                    <button
-                      type="button"
-                      className="solid-btn"
-                      onClick={() => setUploadOpen(true)}
-                      disabled={album.phase !== 'ready'}
-                    >
-                      <PlusIcon size={15} />
-                      放照片
-                    </button>
-                  )}
-                </>
+                route === 'album' ? (
+                  <button
+                    type="button"
+                    className="solid-btn"
+                    onClick={() => setUploadOpen(true)}
+                    disabled={album.phase !== 'ready'}
+                  >
+                    <PlusIcon size={15} />
+                    放照片
+                  </button>
+                ) : null
               }
             />
 

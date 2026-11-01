@@ -1,28 +1,9 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="blush">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#fdf1f2" />
-    <!--
-      主题必须在样式表之前定下来，否则上次选了奶油的人会先看到一帧莓奶。
-      同步执行、包在 try 里：隐私模式下 localStorage 会抛异常，不能连累渲染。
-
-      默认是莓奶；只有明确选过奶油的人才会被切过去。
-      key 带 v2：改默认值那一刻，所有人手里的旧偏好都得作废，不然自己这台
-      设备会一直按旧记录停在奶油上，改了也「看起来没生效」。
-    -->
-    <script>
-      (function () {
-        try {
-          if (localStorage.getItem('yyyhhh:theme:v2') === 'cream') {
-            document.documentElement.dataset.theme = 'cream'
-            var m = document.querySelector('meta[name="theme-color"]')
-            if (m) m.setAttribute('content', '#f9f2e8')
-          }
-        } catch (e) {}
-      })()
-    </script>
     <!--
       白屏看门狗。
 

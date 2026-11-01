@@ -1,42 +1,5 @@
 import type { ReactNode } from 'react'
 
-export type Theme = 'cream' | 'blush'
-
-interface Props {
-  theme: Theme
-  onTheme: (theme: Theme) => void
-  className?: string
-}
-
-/**
- * 两段式胶囊，不是单按钮 toggle —— 现在在哪个主题里是看得见的。
- * 搬出来是因为首页右上角和三个子页的页头都要用同一个。
- */
-export function ThemeSwitch({ theme, onTheme, className }: Props) {
-  return (
-    <div
-      className={`theme-switch${className ? ` ${className}` : ''}`}
-      role="group"
-      aria-label="切换主题"
-    >
-      <button
-        type="button"
-        className={theme === 'blush' ? 'on' : ''}
-        onClick={() => onTheme('blush')}
-      >
-        莓奶
-      </button>
-      <button
-        type="button"
-        className={theme === 'cream' ? 'on' : ''}
-        onClick={() => onTheme('cream')}
-      >
-        奶油
-      </button>
-    </div>
-  )
-}
-
 interface HeadProps {
   title: string
   sub?: string

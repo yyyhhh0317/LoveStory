@@ -106,90 +106,14 @@
   --nav-h: 60px;
 }
 
-/* ---------- 主题 A：奶油（默认） ---------- */
+/* ---------- 调色板 ---------- */
 /*
+ * 只剩一套色。
  * 中性阶的每一档都是按目标对比度反解的，不是挑出来的：
  *   ink 9.0 · ink-soft 6.0 · ink-faint 4.6 · ink-ghost 2.6（只准装饰）
  * 三档都能承载对应字号的正文；ghost 那一档明确禁止放文字。
  */
-[data-theme='cream'] {
-  --bg: #f9f2e8;
-  --bg-deep: #f2e4d3;
-  --surface: #fffdfa;
-  --surface-2: #fdf5ec;
-
-  --ink: #4f3f33; /* oklch(.381 .030 56) · 9.0 */
-  --ink-soft: #6b594d; /* oklch(.477 .030 56) · 6.0 */
-  --ink-faint: #7d6b5e; /* oklch(.540 .030 56) · 4.6 */
-  --ink-ghost: #a89587; /* oklch(.682 .030 56) · 2.6 · 仅装饰 */
-
-  /* 实色不用 alpha：同一个 token 压在三种底色上会有三种强度 */
-  --line: #ddc8ba; /* 1.45 */
-  --line-strong: #ae9b8d; /* 2.40 */
-
-  --accent: #cf9d7c;
-  --accent-soft: rgba(207, 157, 124, 0.14);
-  --btn: #7d5f4c;
-  --btn-ink: #fff8f0;
-  --focus: #96603f; /* 焦点环 · 4.7 对底色，5.1 对面板 */
-
-  --frame: #ffffff;
-  --book: #e9cbaa;
-  --book-2: #dcb992;
-  --book-ink: #6b4f38;
-  --book-shade: 112, 82, 58;
-  --book-paper: #fdf8f1;
-  --book-shade-deep: #3d2c1e;
-  --book-shade-mid: #4a3626;
-  --book-edge: #5a4330;
-
-  /* 沉浸视图（恒暗色，但随主题偏暖/偏粉）
-     这里的每一档也是按对 --v-base 的目标比反解的：
-     vink 14 · vink-soft 6.0 · vink-faint 4.6 · vink-ghost 3.0 */
-  --v-base: #241a15;
-  --v-shade: 26, 19, 16;
-  --vpanel: rgba(26, 20, 17, 0.88);
-  --vink: #f1e7df; /* 14.0 */
-  --vink-soft: #a19890; /* 6.0 */
-  --vink-faint: #8e857d; /* 4.7 · 日期/序号分母 */
-  --vink-ghost: #6f655f; /* 3.0 · 仅装饰 */
-  --vline: #504741; /* 1.88 */
-  --vline-strong: #696159; /* 2.80 */
-  --vgold: #d8b189; /* 8.6 */
-
-  --warm: #e2a88b;
-  --warm-ink: #4a2e22; /* 角标文字 · 5.99（原来是白字 2.06） */
-
-  --note-1: #fdf3e3;
-  --note-2: #fceeea;
-  --note-3: #eef3e7;
-  --note-4: #f2eef7;
-  --note-ink: #4f3f33;
-  --note-meta: #8b7869; /* 便签时间戳，压在便签色上 ≥3.4 */
-
-  --toast-bg: #5a4a40;
-  --toast-ink: #fff8f0;
-  --danger: #b4574f; /* 压在浅底上的错误色，5.1 */
-  --danger-on-dark: #f0a9a2; /* 压在暗底上的错误字，9.5 */
-
-  /* 相纸阴影：一层紧贴的接触影 + 一层弥散环境影。
-     只有弥散影时相纸像「浮着」，补上接触影才像「压着」。 */
-  --shadow-photo: 0 1px 2px rgba(150, 118, 92, 0.16),
-    0 12px 28px -14px rgba(150, 118, 92, 0.34),
-    0 3px 10px -6px rgba(150, 118, 92, 0.18);
-  --shadow-photo-hover: 0 1px 2px rgba(150, 118, 92, 0.2),
-    0 24px 52px -20px rgba(150, 118, 92, 0.4),
-    0 6px 16px -8px rgba(150, 118, 92, 0.2);
-  --shadow-soft: 0 10px 30px -18px rgba(150, 118, 92, 0.4);
-  --shadow-panel: 0 40px 80px -40px rgba(120, 90, 68, 0.4);
-
-  /* 涂鸦的「纸白」：贴纸感来自彩色描边下面那道白，不是纯白 */
-
-}
-
-/* ---------- 主题 C：莓奶 ---------- */
-/* 与奶油共用同一套 L，只换 C/H —— 两套主题才是「同一套东西的两个色温」 */
-[data-theme='blush'] {
+:root {
   --bg: #fdf1f2;
   --bg-deep: #f8e4e7;
   --surface: #fffbfb;
@@ -253,7 +177,6 @@
     0 6px 16px -8px rgba(150, 110, 118, 0.18);
   --shadow-soft: 0 10px 30px -18px rgba(150, 110, 118, 0.34);
   --shadow-panel: 0 40px 80px -40px rgba(120, 85, 92, 0.34);
-
 }
 
 * {
@@ -277,7 +200,6 @@ body {
   font-synthesis: none;
   overflow: hidden;
   overscroll-behavior: none;
-  transition: background-color 0.6s var(--ease-soft), color 0.45s var(--ease-soft);
 }
 
 button {
@@ -1657,46 +1579,6 @@ textarea {
   background: var(--line);
 }
 
-/* 主题切换 */
-.theme-switch {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  height: var(--h-lg);
-  padding: 3px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
-}
-
-.theme-switch button {
-  height: var(--h-sm);
-  padding: 0 var(--sp-4);
-  border-radius: var(--r-pill);
-  font-size: var(--fs-meta);
-  letter-spacing: var(--ls-ui);
-  color: var(--ink-soft);
-  transition: background-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
-}
-
-/* 未选中的那一颗原来完全没有 hover */
-@media (hover: hover) and (pointer: fine) {
-  .theme-switch button:not(.on):hover {
-    background: var(--surface-2);
-    color: var(--ink);
-  }
-}
-
-.theme-switch button:not(.on):active {
-  background: var(--line);
-}
-
-.theme-switch button.on {
-  background: var(--btn);
-  color: var(--btn-ink);
-}
-
 /* 提示条浮在底部导航之上，不会被它压住 */
 .toast {
   position: fixed;
@@ -1955,10 +1837,6 @@ textarea {
 }
 
 @media (max-width: 720px) {
-  .theme-switch button {
-    padding: 0 var(--sp-3);
-  }
-
   .page-head .solid-btn {
     height: var(--h-md);
     padding: 0 var(--sp-4);
@@ -1968,8 +1846,7 @@ textarea {
     padding: var(--sp-7) var(--sp-6) var(--sp-6);
   }
 
-  .ghost-btn,
-  .theme-switch {
+  .ghost-btn {
     height: var(--h-md);
   }
 
@@ -2005,7 +1882,6 @@ textarea {
   }
 }
 
-
 /* ============================================================
    应用外壳：计时器首页 + 三页导航
    ============================================================ */
@@ -2024,8 +1900,6 @@ textarea {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
-  /* 真正铺满屏幕的是这一层，不是 body —— 主题过渡必须写在这里 */
-  transition: background-color 0.6s var(--ease-soft);
 }
 
 .page {
@@ -2123,7 +1997,6 @@ html[data-scroll='locked'] .page-scroll {
   inset: 0 calc(-1 * var(--sp-5));
   background: var(--bg);
   z-index: -1;
-  transition: background-color 0.6s var(--ease-soft);
 }
 
 /* 读屏专用，视觉上不存在 */
@@ -2155,7 +2028,6 @@ html[data-scroll='locked'] .page-scroll {
   padding: 0 var(--sp-3) env(safe-area-inset-bottom);
   background: var(--surface);
   border-top: 1px solid var(--line);
-  transition: background-color 0.6s var(--ease-soft), border-color 0.6s var(--ease-soft);
 }
 
 .nav-item {
@@ -2198,12 +2070,6 @@ html[data-scroll='locked'] .page-scroll {
   padding: calc(var(--sp-6) + env(safe-area-inset-top)) var(--sp-5)
     calc(var(--nav-h) + var(--sp-8) + env(safe-area-inset-bottom));
   overflow: hidden;
-}
-
-.home-theme {
-  position: absolute;
-  top: calc(var(--sp-4) + env(safe-area-inset-top));
-  right: var(--sp-4);
 }
 
 .home-note {

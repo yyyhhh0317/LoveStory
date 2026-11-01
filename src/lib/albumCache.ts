@@ -93,12 +93,3 @@ export function writeAlbumCache(photos: Photo[], counts: Record<string, number>)
     // 配额满、隐私模式禁写：都是可接受的，主流程不该受影响
   }
 }
-
-/** 结构升级或调试时用；升 V 也能达到同样效果 */
-export function clearAlbumCache(): void {
-  try {
-    localStorage.removeItem(KEY)
-  } catch {
-    /* 同上 */
-  }
-}

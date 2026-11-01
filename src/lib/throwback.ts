@@ -1,3 +1,4 @@
+import { pad } from './format'
 import type { Photo } from './types'
 
 export interface Throwback {
@@ -5,8 +6,6 @@ export interface Throwback {
   /** 「三年前的今天」或「往年的今天」 */
   label: string
 }
-
-const pad = (n: number) => String(n).padStart(2, '0')
 
 /** 今天（本地时区）的键，用来记住「今天不再提示」 */
 export function todayKey(now = new Date()): string {

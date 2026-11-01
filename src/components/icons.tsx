@@ -55,16 +55,6 @@ export function ArrowRightIcon({ size = 18, className }: IconProps) {
   )
 }
 
-export function TargetIcon({ size = 18, className }: IconProps) {
-  return (
-    <svg {...base(size)} className={className} aria-hidden="true">
-      <circle cx="12" cy="12" r="6.5" />
-      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
-      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2" />
-    </svg>
-  )
-}
-
 export function MessageIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...base(size)} className={className} aria-hidden="true">
@@ -103,14 +93,6 @@ export function TrashIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...base(size)} className={className} aria-hidden="true">
       <path d="M4 7h16M9 7V5h6v2M6.5 7l.8 12h9.4l.8-12" />
-    </svg>
-  )
-}
-
-export function CheckIcon({ size = 16, className }: IconProps) {
-  return (
-    <svg {...base(size)} className={className} aria-hidden="true">
-      <path d="M5 12.5l4.5 4.5L19 7" />
     </svg>
   )
 }

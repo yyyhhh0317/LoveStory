@@ -203,7 +203,3 @@ export async function processImage(file: File): Promise<ProcessedImage> {
     takenAt: exifDate ?? fallback.toISOString(),
   }
 }
-
-export async function blobToObjectUrl(blob: Blob): Promise<string> {
-  return URL.createObjectURL(blob)
-}

@@ -2,9 +2,9 @@ import { useCallback, useLayoutEffect, useEffect, useRef, useState } from 'react
 import { useImgUrl } from '../hooks/useImgUrl'
 import { repo } from '../lib/repo'
 import { prefetchAllowance, preloadImage, whenIdle } from '../lib/preload'
-import { formatDayCn } from '../lib/format'
-import type { Photo, ImageVariant } from '../lib/types'
-import { FLIP_MS, prefersReducedMotion, type FrameRect } from '../lib/flight'
+import { formatDayCn, pad } from '../lib/format'
+import type { Photo } from '../lib/types'
+import { prefersReducedMotion, type FrameRect } from '../lib/flight'
 import { DISSOLVE_MS } from '../lib/presence'
 import { FlightPhoto } from './FlightPhoto'
 import { MessageBoard } from './MessageBoard'
@@ -27,17 +27,9 @@ interface Props {
   onDelete: (photo: Photo) => void
   messageCount: number
   onMessageCountChange: (delta: number) => void
-  /** 点开相册模式才翻书：照片贴在统一纸页上、一页一页绕书脊翻；时间线浏览仍用原来的淡入 */
-  flip?: boolean
   /** 点开时那张缩略图在屏幕上的位置：有就从这里放大过来，没有就直接淡入 */
   origin?: FrameRect | null
 }
-
-/** 珍藏册纸页：统一 3:4 竖页，和封面（318×424）同比例 */
-const PAGE_AR = 3 / 4
-/** 照片离纸边的留白比例：左右 6%、上下 5% —— CSS 的 .book-hole 必须与之同步 */
-const HOLE_X = 0.06
-const HOLE_Y = 0.05
 
 /**
  * 平均亮度的记忆表。
@@ -45,17 +37,6 @@ const HOLE_Y = 0.05
  * 所以来回翻同一张会重复下载。按地址记住结果，翻回去就不用再算。
  */
 const lumCache = new Map<string, number>()
-
-/** 在一个框里放下整页纸（contain 居中），坐标相对框 */
-function pageFit(box: { width: number; height: number }): FrameRect {
-  let w = box.width
-  let h = w / PAGE_AR
-  if (h > box.height) {
-    h = box.height
-    w = h * PAGE_AR
-  }
-  return { x: (box.width - w) / 2, y: (box.height - h) / 2, w, h }
-}
 
 export function Viewer({
   photos,
@@ -67,7 +48,6 @@ export function Viewer({
   onDelete,
   messageCount,
   onMessageCountChange,
-  flip = false,
   origin = null,
 }: Props) {
   const photo = photos[index]
@@ -126,38 +106,6 @@ export function Viewer({
     front: 0,
   })
   const imgRef = useRef<HTMLImageElement>(null)
-  /**
-   * 翻页状态（相册模式的真·翻书）。
-   *
-   * 一页 = 一张统一 3:4 的纸页（照片贴在页面上），所以翻起的「叶子」
-   * 和垫底的页子矩形完全重合，翻页几何才不会错位。
-   * 绕左侧书脊转 180°：前半段看到叶子正面的照片、后半段露出纸背，
-   * 和真书一样。翻页期间锁定导航，翻完才放行下一页。
-   */
-  interface BookTurn {
-    dir: 1 | -1
-    /** 所有翻页元素共用的纸页矩形（相对 viewer-frame） */
-    page: FrameRect
-    /** 叶子正面显示的照片地址（往后翻 = 旧照片，往前翻 = 新照片） */
-    leafSrc: string | null
-    leafKey: string | null
-    /** 缓存未命中时叶子按哪一档补解析 */
-    leafVariant: ImageVariant
-    /** 往回翻时垫在底下的旧照片地址 */
-    underSrc: string | null
-    underKey: string | null
-    underVariant: ImageVariant
-  }
-  const [turn, setTurn] = useState<BookTurn | null>(null)
-  const turning = useRef(false)
-  const turnTimer = useRef<number | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (turnTimer.current != null) window.clearTimeout(turnTimer.current)
-    }
-  }, [])
-
   const textRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -319,31 +267,10 @@ export function Viewer({
   }, [thumbUrl, ambienceOn])
 
   /*
-   * 纸页矩形：相册模式里照片贴在一张统一 3:4 的纸页上，
-   * 页子跟随窗口尺寸变化。flight 的终点矩形和翻页叶子都出自同一套数学，
-   * 所以这里量准了，后面全都对得上。
-   */
-  const [pageRect, setPageRect] = useState<FrameRect | null>(null)
-  useLayoutEffect(() => {
-    if (!flip) {
-      setPageRect(null)
-      return
-    }
-    const el = frameRef.current
-    if (!el) return
-    const measure = () => setPageRect(pageFit(el.getBoundingClientRect()))
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [flip])
-
-  /*
    * 起飞：把终点交给飞行层。
    *
    * 终点不量真实的 img —— 大图可能还没解码完，量出来是 0 宽。
-   * 用 .viewer-frame 的框按 contain 反推：普通模式就是照片自身的矩形；
-   * 相册模式照片贴在纸页上，要再算一层「页内留白」，落点才是照片真正的位置。
+   * 用 .viewer-frame 的框按 contain 反推，得到照片自身的矩形。
    *
    * 只在挂载时跑一次：飞行途中翻到下一张不该重新起飞。
    */
@@ -352,40 +279,19 @@ export function Viewer({
     if (!flew || !origin || !el || !photo) return
     const box = el.getBoundingClientRect()
     const ar = photo.aspect > 0 ? photo.aspect : photo.width / photo.height || 4 / 3
-    let to: FrameRect
-    if (flip) {
-      const page = pageFit(box)
-      const hx = page.w * HOLE_X
-      const hy = page.h * HOLE_Y
-      const cw = page.w - hx * 2
-      const ch = page.h - hy * 2
-      let w = cw
-      let h = w / ar
-      if (h > ch) {
-        h = ch
-        w = h * ar
-      }
-      to = {
-        x: box.x + page.x + hx + (cw - w) / 2,
-        y: box.y + page.y + hy + (ch - h) / 2,
-        w,
-        h,
-      }
-    } else {
-      let w = box.width
-      let h = w / ar
-      if (h > box.height) {
-        h = box.height
-        w = h * ar
-      }
-      to = {
-        x: box.x + (box.width - w) / 2,
-        y: box.y + (box.height - h) / 2,
-        w,
-        h,
-      }
+    let w = box.width
+    let h = w / ar
+    if (h > box.height) {
+      h = box.height
+      w = h * ar
     }
-    // 缩略图一定在缓存里（刚刚还在画布/内页上显示着），用它起飞不会空一帧
+    const to: FrameRect = {
+      x: box.x + (box.width - w) / 2,
+      y: box.y + (box.height - h) / 2,
+      w,
+      h,
+    }
+    // 缩略图一定在缓存里（刚刚还在时间轴上显示着），用它起飞不会空一帧
     const src = thumbUrl ?? fullUrl
     if (!src) {
       setLanded(true)
@@ -493,124 +399,15 @@ export function Viewer({
     if (ok) setEditing(false)
   }
 
-  /**
-   * 翻一页。
-   *
-   * 相册模式走真翻书：照片都贴在统一 3:4 的纸页上，翻页前量一次
-   * viewer-frame 得到页矩形，然后：
-   *   - 往后翻：新一页垫底（就是当前渲染的 img），旧一页作为叶子绕左脊翻走；
-   *   - 往前翻：新一页先藏住（它的叶子从 -180° 翻回来），旧一页垫底。
-   * 时间线模式保持原来的直接换图。
-   */
+  /** 翻一页：越界就什么都不做，翻页边界由导航按钮的 disabled 兜住 */
   const go = (delta: number) => {
     const next = index + delta
     if (next < 0 || next >= photos.length) return
-
-    const out = photos[index]
-    const inc = photos[next]
-    const el = frameRef.current
-    const canFlip = flip && !prefersReducedMotion() && out && inc && el && !turning.current
-
-    if (canFlip) {
-      const page = pageFit(el!.getBoundingClientRect())
-      const dir: 1 | -1 = delta > 0 ? 1 : -1
-      turning.current = true
-
-      /*
-       * 叶子上用哪一档图有讲究：刚显示过的那页 full 一定在缓存里
-       * （底下的 img 正放着呢），直接用 full 就不会有「翻起瞬间变糊」；
-       * 还没看过的那页只能先上 thumb，真图在底下那张 img 里同时加载。
-       */
-      const peek = (p: Photo, v: ImageVariant) =>
-        p.storageKey ? repo.peekUrl(p.storageKey, v) : null
-
-      if (dir === 1) {
-        setTurn({
-          dir,
-          page,
-          leafSrc: peek(out, 'full') ?? peek(out, 'thumb'),
-          leafKey: out.storageKey ?? null,
-          leafVariant: 'full',
-          underSrc: null,
-          underKey: null,
-          underVariant: 'thumb',
-        })
-      } else {
-        setTurn({
-          dir,
-          page,
-          leafSrc: peek(inc, 'thumb'),
-          leafKey: inc.storageKey ?? null,
-          leafVariant: 'thumb',
-          underSrc: peek(out, 'full') ?? peek(out, 'thumb'),
-          underKey: out.storageKey ?? null,
-          underVariant: 'full',
-        })
-      }
-
-      turnTimer.current = window.setTimeout(() => {
-        turning.current = false
-        turnTimer.current = null
-        setTurn(null)
-      }, FLIP_MS)
-    }
-
     onIndexChange(next)
   }
 
-  /* 叶子/垫底页上的缩略图没进缓存时补一发解析；真图在底下那张 img 里已经在加载了 */
-  useEffect(() => {
-    if (!turn) return
-    const missing: Array<'leaf' | 'under'> = []
-    if (!turn.leafSrc && turn.leafKey) missing.push('leaf')
-    if (!turn.underSrc && turn.underKey) missing.push('under')
-    if (missing.length === 0) return
-    let alive = true
-    void Promise.all(
-      missing.map(async (m) => {
-        const key = (m === 'leaf' ? turn.leafKey : turn.underKey) as string
-        const variant = m === 'leaf' ? turn.leafVariant : turn.underVariant
-        const url = await repo.resolveUrl(key, variant).catch(() => null)
-        return [m, url] as const
-      })
-    ).then((pairs) => {
-      if (!alive) return
-      setTurn((t) => {
-        if (!t) return t
-        const nt = { ...t }
-        for (const [m, url] of pairs) {
-          if (!url) continue
-          if (m === 'leaf' && !nt.leafSrc) nt.leafSrc = url
-          if (m === 'under' && !nt.underSrc) nt.underSrc = url
-        }
-        return nt
-      })
-    })
-    return () => {
-      alive = false
-    }
-  }, [turn])
-
-  const pad = (n: number) => String(n).padStart(2, '0')
-
   /* 从缩略图长出来的这一张，入场时不播 img-in：飞行层已经在演了 */
   const isFirstShot = flew && photo.id === firstPhotoId.current
-
-  /*
-   * 相册模式：照片贴在纸页的「洞」里（统一留白）。
-   * 页矩形来自 ResizeObserver，照片就是洞里 contain 的那张 img。
-   */
-  const holeStyle =
-    flip && pageRect
-      ? {
-          position: 'absolute' as const,
-          left: pageRect.x + pageRect.w * HOLE_X,
-          top: pageRect.y + pageRect.h * HOLE_Y,
-          width: pageRect.w * (1 - HOLE_X * 2),
-          height: pageRect.h * (1 - HOLE_Y * 2),
-        }
-      : undefined
-  const pageStyle = (r: FrameRect) => ({ left: r.x, top: r.y, width: r.w, height: r.h })
 
   /* 它盖住整屏、接管 ←/→/Esc，对读屏和键盘来说就是一个模态 */
   return (
@@ -623,10 +420,10 @@ export function Viewer({
     >
       {/*
         底色层。
-        飞行时画布还亮着，若直接让 .viewer 淡入，画布顶栏会和详情页标题
+        飞行时底下那一页还亮着，若直接让 .viewer 淡入，页头会和详情页标题
         叠成两层字；若硬切，又像「啪」一下关灯。
-        折中：这一层从一开始就**完全不透明**（挡住画布，不会叠字），
-        只让它的颜色从画布底色过渡到暗色 —— 读起来是「灯慢慢暗下来」。
+        折中：这一层从一开始就**完全不透明**（挡住底下的页面，不会叠字），
+        只让它的颜色从页面底色过渡到暗色 —— 读起来是「灯慢慢暗下来」。
         它独立成一个兄弟层，所以颜色变化不会连带把飞行中的照片一起淡掉。
       */}
       <div className="viewer-wash" aria-hidden="true" />
@@ -718,22 +515,12 @@ export function Viewer({
             }}
           >
             {/*
-              相册模式：一张统一的纸页垫底，照片贴在页面的留白区里。
-              页子和翻页叶子用的是同一个矩形（pageFit），翻起来才严丝合缝。
-            */}
-            {flip && pageRect && (
-              <div className="book-paper" style={pageStyle(pageRect)} aria-hidden="true" />
-            )}
-
-            {/*
               缩略图垫底。
               主图的 src 是 1800px 大图，慢网下要好几秒 —— 这段时间 <img> 里
               一个像素都没有，中间就是一块空白，氛围层在四周模糊地亮着，
               反而更显得中间缺了一块。缩略图（560px，约 40KB）几乎一定已经
-              在缓存里（画布和内页显示的就是它），先把它铺上去，
+              在缓存里（内页显示的就是它），先把它铺上去，
               大图解码完再让它退场。
-
-              class 与主图保持同一套，翻页时的隐藏规则才不会错位。
             */}
             {thumbUrl && !imgReady && (
               <img
@@ -743,22 +530,13 @@ export function Viewer({
                 aria-hidden="true"
                 draggable={false}
                 decoding="async"
-                className={
-                  flip && !isFirstShot
-                    ? turn?.dir === -1
-                      ? 'book-still book-hidden viewer-ph'
-                      : 'book-still viewer-ph'
-                    : 'viewer-ph'
-                }
-                style={holeStyle}
+                className="viewer-ph"
               />
             )}
 
             {/*
-              这张 img：相册模式下绝对定位在纸页的留白区里，且永远不播
-              img-in 淡入 —— 它要么是被翻页露出来的底图，要么正被叶子
-              盖着，淡入会在叶子掀开时露馅。往回翻的整个过程中它还要
-              藏住（叶子的正面就是它自己）。
+              这张 img：不播 img-in 淡入 —— 它要么正被飞行层盖着，
+              要么刚从飞行层手里接管，淡入会让两者叠出半透明。
             */}
             <img
               ref={imgRef}
@@ -766,53 +544,18 @@ export function Viewer({
               onLoad={() => setReadyId(photo.id)}
               decoding="async"
               fetchPriority="high"
-              className={
-                flip && !isFirstShot
-                  ? turn?.dir === -1
-                    ? 'book-still book-hidden'
-                    : 'book-still'
-                  : undefined
-              }
-              style={{
-                ...holeStyle,
+              style={
                 // 飞行层落地的同一帧换成真图，两者位置像素级对齐，看不出接缝。
                 // transition 必须关掉：淡入会让交换那几帧半透明，就是「闪一下」
-                ...(isFirstShot
+                isFirstShot
                   ? { animation: 'none', opacity: landed ? 1 : 0, transition: 'none' }
-                  : {}),
-              }}
+                  : undefined
+              }
               src={fullUrl ?? thumbUrl ?? undefined}
               alt={photo.caption ?? ''}
               draggable={false}
             />
 
-            {/*
-              真·翻书的三层：垫底的旧页（只往回翻有）→ 书脊阴影 → 翻动的叶子。
-              叶子绕左侧书脊转 180°，前半段是照片正面、后半段是纸背，
-              和封面掀开用的是同一种「有厚度的纸」语言。
-            */}
-            {turn && (
-              <div className="book-turn">
-                {turn.underSrc && (
-                  <div className="book-paper book-page-under" style={pageStyle(turn.page)}>
-                    <div className="book-hole">
-                      <img src={turn.underSrc} alt="" draggable={false} />
-                    </div>
-                  </div>
-                )}
-                <div className="book-gutter" style={pageStyle(turn.page)} aria-hidden="true" />
-                <div className="book-leaf" data-dir={turn.dir} style={pageStyle(turn.page)}>
-                  <div className="book-leaf-flip">
-                    <div className="book-paper book-leaf-face book-leaf-front">
-                      <div className="book-hole">
-                        {turn.leafSrc && <img src={turn.leafSrc} alt="" draggable={false} />}
-                      </div>
-                    </div>
-                    <div className="book-paper book-leaf-face book-leaf-back" aria-hidden="true" />
-                  </div>
-                </div>
-              </div>
-            )}
             <button
               type="button"
               className="viewer-nav prev"

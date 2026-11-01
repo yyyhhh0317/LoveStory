@@ -35,10 +35,9 @@ interface FailProps {
   retrying: boolean
   onRetry: () => void
   variant?: 'page'
-  title?: string
 }
 
-export function ConnectFail({ error, retrying, onRetry, variant, title }: FailProps) {
+export function ConnectFail({ error, retrying, onRetry, variant }: FailProps) {
   return (
     <div
       className={`status-screen${variant === 'page' ? ' is-page' : ''}`}
@@ -50,7 +49,7 @@ export function ConnectFail({ error, retrying, onRetry, variant, title }: FailPr
           没连上
         </div>
 
-        <h2>{title ?? '相册暂时没打开'}</h2>
+        <h2>相册暂时没打开</h2>
 
         <p>
           照片都还在，只是这会儿读不到。

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isRemote, repo } from '../lib/repo'
-import { describeError, type FriendlyError } from '../lib/errors'
+import { describeError, LOAD_TIMEOUT_MS, type FriendlyError } from '../lib/errors'
 import { readAlbumCache, writeAlbumCache } from '../lib/albumCache'
 import type { NewPhotoInput, Photo } from '../lib/types'
 
@@ -14,9 +14,6 @@ import type { NewPhotoInput, Photo } from '../lib/types'
  * 关键在于「读不到」和「真的没有」必须是两个状态，否则界面会撒谎。
  */
 export type AlbumPhase = 'loading' | 'ready' | 'error'
-
-/** 免费项目被暂停时请求会一直挂着，没有超时就会永远停在加载页 */
-const LOAD_TIMEOUT_MS = 15000
 
 /**
  * 内容签名：判断「刷新回来的东西和手上的一不一样」。

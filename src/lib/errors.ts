@@ -13,6 +13,15 @@ export interface FriendlyError {
   hint: string | null
 }
 
+/**
+ * 一个查询最多等多久。
+ *
+ * 三个列表 hook 都靠这个超时把「一直转圈」变成「连不上」——
+ * 免费项目被暂停时请求会挂着不返回，没有它就会永远停在加载页。
+ * 共用一个值，避免三个页面超时口径不一致（改一处只生效一半）。
+ */
+export const LOAD_TIMEOUT_MS = 15000
+
 const PAUSED_HINT =
   '如果有一阵子没打开过，可以去 Supabase 面板点一下 Restore 把它唤醒，照片不会丢。'
 

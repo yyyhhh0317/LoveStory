@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { repo } from '../lib/repo'
-import { describeError, type FriendlyError } from '../lib/errors'
+import { describeError, LOAD_TIMEOUT_MS, type FriendlyError } from '../lib/errors'
 import type { Plan } from '../lib/types'
-
-const LOAD_TIMEOUT_MS = 15000
 
 export type ListPhase = 'loading' | 'ready' | 'error'
 

@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import { TimelineItem } from '../TimelineItem'
 import { ConnectFail, LoadingScreen } from '../ScreenStates'
 import { groupByDay } from '../../lib/days'
-import { BookIcon, CloseIcon, PlusIcon } from '../icons'
+import { BookIcon, CloseIcon, HeartIcon, PlusIcon } from '../icons'
 import type { AlbumPhase } from '../../hooks/useAlbum'
 import type { FriendlyError } from '../../lib/errors'
 import type { Throwback } from '../../lib/throwback'
@@ -112,28 +112,66 @@ export function AlbumPage({
               </button>
             </div>
           ) : (
-            groups.map((group, gi) => (
-              <section key={group.key} className="tl-day">
-                <h2 className="tl-day-head">
-                  <span className="tl-dot" aria-hidden="true" />
-                  <span className="tl-day-label">{group.label}</span>
-                  <span className="tl-day-count">{group.photos.length} 张</span>
-                </h2>
-                {group.photos.map((photo, pi) => (
-                  <TimelineItem
-                    key={photo.id}
-                    photo={photo}
-                    messageCount={counts[photo.id] ?? 0}
-                    /*
-                     * 最先能看到的这三张先下：不这么做的话，
-                     * 第一屏永远是空框，等懒加载排到它们时人已经滚过去了。
-                     */
-                    priority={gi === 0 && pi < 3 ? 'high' : 'auto'}
-                    onOpen={onOpenPhoto}
-                  />
-                ))}
-              </section>
-            ))
+            /*
+             * 中轴 + 一左一右交替：第 1、3、5 天（索引 0/2/4）日期在左、照片在右，
+             * 下一天反过来。只换 grid-column，DOM 顺序始终是「日期 / 节点 / 照片」，
+             * 读屏念出来才是通顺的一句话。
+             */
+            <div className="tl-timeline">
+              {groups.map((group, gi) => {
+                const photosRight = gi % 2 === 0
+                const prev = gi > 0 ? groups[gi - 1] : null
+                /* 年份只在换年那一行出现，否则每行都重复一遍太吵 */
+                const showYear = group.year > 0 && (!prev || prev.year !== group.year)
+
+                return (
+                  <section
+                    key={group.key}
+                    className={`tl-day${photosRight ? '' : ' tl-day--flip'}`}
+                  >
+                    <div className="tl-date">
+                      {showYear && <span className="tl-date-year">{group.year}</span>}
+                      {group.month > 0 ? (
+                        <>
+                          <span className="tl-date-main">
+                            {group.month} 月 {group.dayOfMonth} 日
+                          </span>
+                          <span className="tl-date-meta">
+                            {group.photos.length > 1
+                              ? `${group.weekday} · ${group.photos.length} 张`
+                              : group.weekday}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="tl-date-main">日期不详</span>
+                      )}
+                    </div>
+
+                    <div className="tl-axis" aria-hidden="true">
+                      <span className="tl-node">
+                        <HeartIcon size={14} filled />
+                      </span>
+                    </div>
+
+                    <div className="tl-photos">
+                      {group.photos.map((photo, pi) => (
+                        <TimelineItem
+                          key={photo.id}
+                          photo={photo}
+                          messageCount={counts[photo.id] ?? 0}
+                          /*
+                           * 最先能看到的这三张先下：不这么做的话，
+                           * 第一屏永远是空框，等懒加载排到它们时人已经滚过去了。
+                           */
+                          priority={gi === 0 && pi < 3 ? 'high' : 'auto'}
+                          onOpen={onOpenPhoto}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )
+              })}
+            </div>
           )}
         </div>
       )}

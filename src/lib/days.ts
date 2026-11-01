@@ -3,6 +3,9 @@ import type { Photo } from './types'
 
 const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
 
+/** 「星期日」→「周日」：时间轴那列只有一窄条，全称放不下 */
+const WEEKDAYS_SHORT = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
 /** 本地时区的 YYYY-MM-DD。不转 UTC —— 全站对日期一律按本地日界理解 */
 export function dayKeyOf(iso: string): string {
   const d = new Date(iso)
@@ -26,6 +29,14 @@ export interface DayGroup {
   key: string
   /** 「2026 年 11 月 1 日 · 星期日」 */
   label: string
+  /**
+   * 拆开的日期碎片，时间轴的日期列按这些排。
+   * 年份单独给，是因为一年只在轴线顶部出现一次，不做成每行都重复。
+   */
+  year: number
+  month: number
+  dayOfMonth: number
+  weekday: string
   /** 组内已按时间升序 */
   photos: Photo[]
 }
@@ -50,9 +61,15 @@ export function groupByDay(photos: Photo[], dir: 'desc' | 'asc' = 'desc'): DayGr
   for (const [key, list] of buckets) {
     const d = new Date(list[0].takenAt)
     const day = formatDayCn(list[0].takenAt)
+    /* 坏时间戳归到 0，界面上退回「日期不详」，别渲染成 NaN */
+    const valid = !Number.isNaN(d.getTime())
     groups.push({
       key,
       label: day ? `${day} · ${weekdayCn(d)}` : '日期不详',
+      year: valid ? d.getFullYear() : 0,
+      month: valid ? d.getMonth() + 1 : 0,
+      dayOfMonth: valid ? d.getDate() : 0,
+      weekday: valid ? WEEKDAYS_SHORT[d.getDay()] ?? '' : '',
       photos: list,
     })
   }

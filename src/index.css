@@ -1985,11 +1985,10 @@ html[data-scroll='locked'] .page-scroll {
 }
 
 /*
- * 吸顶元素（日期头、两个输入区）的背景要横向出血到容器外，
+ * 吸顶输入区（两个输入框）的背景要横向出血到容器外，
  * 否则内容从两侧 16px 的留白里穿过去，看着像漏了一条。
  * 用伪元素而不是负 margin：负 margin 会改元素宽度，进而改 sticky 的基准。
  */
-.tl-day-head::before,
 .board-composer::before,
 .plans-composer::before {
   content: '';
@@ -2153,62 +2152,148 @@ html[data-scroll='locked'] .page-scroll {
   color: var(--ink-ghost);
 }
 
-/* ---------- 相册时间轴 ---------- */
+/* ---------- 相册时间轴（中轴 + 左右交替） ----------
+ * 结构：每天一行，三栏「1fr 中轴 1fr」。
+ * 日期永远贴着中轴，照片永远在中轴的另一侧，所以「交替」只换 grid-column。
+ */
 .tl-list {
   max-width: 640px;
   margin: 0 auto;
   padding: 0 var(--sp-5);
 }
 
-.tl-day {
-  padding-bottom: var(--sp-6);
+.tl-timeline {
+  /* 这两个是对象尺寸（轴线宽 / 格子最大边），不是间距，不进 --sp-* */
+  --tl-axis: 24px;
+  --tl-tile: 200px;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-7);
+  padding: var(--sp-5) 0 var(--sp-6);
 }
 
-.tl-day-head {
-  position: sticky;
+/*
+ * 那条中轴。上下各淡出一段，别让线在两个端点上硬生生截断。
+ * left: 50% 正好落在中轴栏的中间 —— 两侧都是 1fr，容器左右对称。
+ * 用 --line-strong 而不是 --line：1px 的细线，浅一档在奶底上就看不见了。
+ */
+.tl-timeline::before {
+  content: '';
+  position: absolute;
   top: 0;
-  z-index: 2;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  margin-left: -0.5px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--line-strong) var(--sp-7),
+    var(--line-strong) calc(100% - var(--sp-7)),
+    transparent
+  );
+}
+
+.tl-day {
+  display: grid;
+  /*
+   * 必须是 minmax(0, 1fr)，不能只写 1fr：
+   * 1fr 的自动下限是内容的 min-content，照片格一旦比半栏宽，整条网格就被撑破、
+   * 图块会顶出右边缘。写成 0 下限，格子才真的对半分。
+   */
+  grid-template-columns: minmax(0, 1fr) var(--tl-axis) minmax(0, 1fr);
+  column-gap: var(--sp-4);
+  align-items: start;
+}
+
+/* 三格都写死行列号：光靠自动排布，flip 时三块会挤到同一格 */
+.tl-date {
+  grid-row: 1;
+  grid-column: 1;
   display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  margin: 0;
-  padding: var(--sp-4) 0 var(--sp-3);
-  background: var(--bg);
+  flex-direction: column;
+  /* 靠中轴那侧对齐，日期才和爱心连着 */
+  align-items: flex-end;
+  gap: var(--sp-1);
+  text-align: right;
+}
+
+.tl-date-year {
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-num);
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-date-main {
   font-family: var(--font-serif);
   font-size: var(--fs-ui);
-  font-weight: 400;
+  line-height: var(--lh-snug);
   letter-spacing: var(--ls-ui);
   color: var(--ink-soft);
 }
 
-.tl-dot {
-  width: 5px;
-  height: 5px;
-  flex: none;
-  border-radius: var(--r-circle);
-  background: var(--accent);
+.tl-date-meta {
+  font-size: var(--fs-meta);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-meta);
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
 }
 
-.tl-day-count {
-  margin-left: auto;
-  font-family: var(--font-sans);
-  font-size: var(--fs-micro);
-  letter-spacing: var(--ls-num);
-  color: var(--ink-ghost);
-  font-variant-numeric: tabular-nums;
+.tl-axis {
+  grid-row: 1;
+  grid-column: 2;
+  display: flex;
+  justify-content: center;
+}
+
+/* 节点：底色跟页面一致，把中轴断开，爱心才像串在线上的一颗 */
+.tl-node {
+  display: grid;
+  place-items: center;
+  width: var(--tl-axis);
+  height: var(--tl-axis);
+  border-radius: var(--r-circle);
+  background: var(--bg);
+  color: var(--accent);
+}
+
+.tl-photos {
+  grid-row: 1;
+  grid-column: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+
+.tl-day--flip .tl-date {
+  grid-column: 3;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.tl-day--flip .tl-photos {
+  grid-column: 1;
+  align-items: flex-end;
 }
 
 .tl-item {
   position: relative;
   display: block;
   width: 100%;
-  margin: 0 0 var(--sp-6);
+  max-width: var(--tl-tile);
   text-align: left;
 }
 
+/* 定比格子：所有照片边长一致，裁掉的边角去详情页看 */
 .tl-frame {
   position: relative;
   display: block;
+  aspect-ratio: 1;
   border-radius: var(--r-md);
   overflow: hidden;
   background: var(--surface-2);
@@ -2219,7 +2304,8 @@ html[data-scroll='locked'] .page-scroll {
 .tl-frame img {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -2236,29 +2322,35 @@ html[data-scroll='locked'] .page-scroll {
 .tl-blank {
   display: block;
   width: 100%;
+  height: 100%;
   background: var(--surface-2);
 }
 
+/* 格子小，简介最多两行；再多就把整行撑歪了 */
 .tl-cap {
-  display: block;
-  margin-top: var(--sp-3);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin-top: var(--sp-2);
   font-family: var(--font-serif);
-  font-size: var(--fs-ui);
-  line-height: var(--lh-body);
-  letter-spacing: var(--ls-ui);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-meta);
   color: var(--ink-soft);
-  white-space: pre-wrap;
   word-break: break-word;
 }
 
+/* 精选星标 / 留言数角标：格子从整屏宽变成了边长一两百的小块，跟着缩一号 */
 .tl-star {
   position: absolute;
-  left: var(--sp-3);
-  bottom: var(--sp-3);
+  left: var(--sp-2);
+  bottom: var(--sp-2);
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: var(--r-circle);
   background: color-mix(in srgb, var(--surface) 86%, transparent);
   color: var(--accent);
@@ -2267,11 +2359,11 @@ html[data-scroll='locked'] .page-scroll {
 /* 留言数角标：原来是 .photo-card .badge，随画布一起搬过来 */
 .tl-badge {
   position: absolute;
-  right: var(--sp-3);
-  top: var(--sp-3);
-  min-width: 22px;
-  height: 22px;
-  padding: 0 var(--sp-2);
+  right: var(--sp-2);
+  top: var(--sp-2);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--sp-1);
   display: grid;
   place-items: center;
   border-radius: var(--r-pill);

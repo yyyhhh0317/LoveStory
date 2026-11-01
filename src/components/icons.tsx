@@ -86,6 +86,19 @@ export function StarIcon({ size = 18, className, filled }: IconProps & { filled?
   )
 }
 
+export function HeartIcon({ size = 16, className, filled }: IconProps & { filled?: boolean }) {
+  return (
+    <svg
+      {...base(size)}
+      className={className}
+      fill={filled ? 'currentColor' : 'none'}
+      aria-hidden="true"
+    >
+      <path d="M20.5 4.5a5.4 5.4 0 00-7.6 0L12 5.4l-.9-.9a5.4 5.4 0 10-7.6 7.6l.9.9L12 20.6l7.6-7.6.9-.9a5.4 5.4 0 000-7.6z" />
+    </svg>
+  )
+}
+
 export function TrashIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...base(size)} className={className} aria-hidden="true">

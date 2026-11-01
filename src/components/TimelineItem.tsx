@@ -45,7 +45,7 @@ export const TimelineItem = memo(function TimelineItem({
           <img
             src={url}
             alt={photo.caption ?? ''}
-            /* 宽高属性给浏览器算比例：解码前就占好位，滚动位置才恢复得准 */
+            /* 宽高属性只是给解码前的兜底；格子是定比的，布局跟它无关 */
             width={photo.width}
             height={photo.height}
             loading="lazy"
@@ -54,7 +54,7 @@ export const TimelineItem = memo(function TimelineItem({
             draggable={false}
           />
         ) : (
-          <span className="tl-blank" style={{ aspectRatio: photo.aspect || 1 }} />
+          <span className="tl-blank" />
         )}
         {photo.featuredAt && (
           <span className="tl-star" title="已收进精选">

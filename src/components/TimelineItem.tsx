@@ -57,7 +57,7 @@ export const TimelineItem = memo(function TimelineItem({
           <span className="tl-blank" />
         )}
         {photo.featuredAt && (
-          <span className="tl-star" title="已收进精选">
+          <span className="tl-star" title="已加入星标">
             <StarIcon size={12} filled />
           </span>
         )}

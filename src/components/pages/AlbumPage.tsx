@@ -110,7 +110,7 @@ export function AlbumPage({
               </p>
               <button type="button" className="solid-btn" onClick={onRequestUpload}>
                 <PlusIcon size={15} />
-                放第一张
+                加入相册
               </button>
             </div>
           ) : (

@@ -34,8 +34,8 @@ const SKIN = {
     maxHeight: 140,
     idle: '匿名',
     busy: '上传中…',
-    label: '成功~',
-    errorText: '没贴上去 —— 文字还在框里，再点一次「贴上」',
+    label: '上传',
+    errorText: '没写上去 —— 文字还在框里，再点一次「上传」',
   },
   board: {
     row: 'board-row',
@@ -44,9 +44,9 @@ const SKIN = {
     error: 'board-error',
     maxHeight: 160,
     idle: '匿名 · Ctrl + Enter 发送',
-    busy: '贴着…',
-    label: '贴上',
-    errorText: '没贴上去 —— 文字还在框里，再点一次「贴上」',
+    busy: '上传中…',
+    label: '上传',
+    errorText: '没贴上去 —— 文字还在框里，再点一次「上传」',
   },
 } as const
 

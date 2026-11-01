@@ -23,7 +23,7 @@ export interface FriendlyError {
 export const LOAD_TIMEOUT_MS = 15000
 
 const PAUSED_HINT =
-  '如果有一阵子没打开过，可以去 Supabase 面板点一下 Restore 把它唤醒，照片不会丢。'
+  '如果有一阵子没打开过，可以去 Supabase 面板点一下 Restore 把它唤醒，照片不会丢'
 
 export function describeError(err: unknown): FriendlyError {
   const detail = err instanceof Error ? err.message : String(err ?? '未知错误')
@@ -40,7 +40,7 @@ export function describeError(err: unknown): FriendlyError {
     m.includes('load failed') ||
     m.includes('offline')
   ) {
-    return { reason: '网络好像没接上', detail, hint: PAUSED_HINT }
+    return { reason: '网络好像没连上', detail, hint: PAUSED_HINT }
   }
 
   if (m.includes('paused') || m.includes('project is paused')) {
@@ -68,5 +68,5 @@ export function describeError(err: unknown): FriendlyError {
   }
 
   // 兜底也给暂停提示：这个项目最常见的原因就是免费版闲置被暂停
-  return { reason: '这次没读出来', detail, hint: PAUSED_HINT }
+  return { reason: '不知道怎么了', detail, hint: PAUSED_HINT }
 }

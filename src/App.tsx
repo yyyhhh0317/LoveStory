@@ -135,7 +135,7 @@ export default function App() {
     const wasFeatured = Boolean(photo.featuredAt)
     try {
       await album.toggleFeatured(photo.id)
-      say(wasFeatured ? '已从精选中移出' : '已收进精选')
+      say(wasFeatured ? '已从星标中移出' : '已加入星标')
     } catch {
       // 界面已经回滚了，这里只需要说清「没成」
       say('星标没存上，再点一次试试', 3800)
@@ -203,7 +203,7 @@ export default function App() {
                     disabled={album.phase !== 'ready'}
                   >
                     <PlusIcon size={15} />
-                    加照片
+                    加入相册
                   </button>
                 ) : null
               }

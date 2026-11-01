@@ -55,7 +55,7 @@ export function PlansPage({ say }: Props) {
             type="text"
             value={draft}
             maxLength={MAX_LEN}
-            placeholder="还想一起去做什么？"
+            placeholder="还想一起去做什么呀"
             aria-label="新的计划"
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -72,7 +72,7 @@ export function PlansPage({ say }: Props) {
             onClick={() => void add()}
           >
             <PlusIcon size={15} />
-            {adding ? '加着…' : '加上'}
+            {adding ? '加入ing…' : '加入'}
           </button>
         </div>
 
@@ -97,12 +97,12 @@ export function PlansPage({ say }: Props) {
           <>
             <section className="plan-group">
               <h2 className="plan-head">
-                还想一起做
+                还没完成滴
                 <span>{open.length}</span>
               </h2>
               {open.length === 0 ? (
                 <p className="plan-empty">
-                  {done.length > 0 ? '全做完了。想点新的吧。' : '还空着，写一件想做的事。'}
+                  {done.length > 0 ? '全做完啦，想点新的事情吧~' : '还空着，写一件想做的事吧~'}
                 </p>
               ) : (
                 open.map((plan) => (
@@ -122,7 +122,7 @@ export function PlansPage({ say }: Props) {
             {done.length > 0 && (
               <section className="plan-group plan-group--done">
                 <h2 className="plan-head">
-                  已经做过了
+                  已经完成啦
                   <span>{done.length}</span>
                 </h2>
                 {done.map((plan) => (

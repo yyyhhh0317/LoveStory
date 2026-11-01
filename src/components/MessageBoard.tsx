@@ -162,7 +162,7 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
       </div>
 
       <div className="annot-list" ref={listRef}>
-        {loading && <div className="annot-empty">正在翻这一页…</div>}
+        {loading && <div className="annot-empty">正在加载这一页…</div>}
 
         {!loading && loadFailed && (
           <div className="annot-empty">

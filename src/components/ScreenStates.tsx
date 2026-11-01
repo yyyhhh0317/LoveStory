@@ -46,15 +46,15 @@ export function ConnectFail({ error, retrying, onRetry, variant }: FailProps) {
       <div className="status-card">
         <div className="status-badge">
           <span className="status-dot" />
-          没连上
+          连接失败鸟
         </div>
 
-        <h2>相册暂时没打开</h2>
+        <h2>相册没打开</h2>
 
         <p>
-          照片都还在，只是这会儿读不到。
+          照片都还在，只是读取失败了。
           <br />
-          可能是网络走神，也可能是太久没来、它打了个盹。
+          可能是网络走神了，也可能是太久没来了
         </p>
 
         <button

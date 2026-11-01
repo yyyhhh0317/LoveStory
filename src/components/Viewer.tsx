@@ -460,8 +460,8 @@ export function Viewer({
             type="button"
             className={`icon-btn icon-btn--on-dark${photo.featuredAt ? ' on' : ''}`}
             onClick={() => onToggleFeatured(photo)}
-            title={photo.featuredAt ? '从相册里移出' : '收进中心相册'}
-            aria-label={photo.featuredAt ? '从相册里移出' : '收进中心相册'}
+            title={photo.featuredAt ? '移除星标' : '加入星标'}
+            aria-label={photo.featuredAt ? '移除星标' : '加入星标'}
           >
             <StarIcon size={17} filled={Boolean(photo.featuredAt)} />
           </button>

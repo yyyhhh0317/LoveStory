@@ -61,7 +61,7 @@ export function TogetherTimer() {
 
   return (
     <section className="timer" role="timer" aria-live="off">
-      <p className="timer-kicker">我们在一起</p>
+      <p className="timer-kicker">刘君阳和刘清菡together已经</p>
 
       <div className="timer-row">
         <div className="tt-cell tt-cell--major">

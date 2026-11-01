@@ -156,7 +156,7 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
             <p>
               照片会在本地压成两档再上传，原图不上传，所以能存很久。
               <br />
-              简介可以留空，之后在详情页随时补。
+              简介可以留空，之后在详情页可以再补哦
             </p>
           </div>
           <button

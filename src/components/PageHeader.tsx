@@ -18,7 +18,7 @@ export function PageHeader({ title, sub, action, onHome }: HeadProps) {
     <header className="page-head">
       <div className="page-head-main">
         <button type="button" className="page-head-brand" onClick={onHome} aria-label="回到首页">
-          yyyhhh
+          YYYHHH
         </button>
         <h1 className="page-head-title">
           {title}

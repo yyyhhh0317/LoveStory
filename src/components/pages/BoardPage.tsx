@@ -19,7 +19,7 @@ export function BoardPage({ say }: Props) {
   /** 草稿、发送中、失败提示都在 Composer 里，这里只管写库和那声提示 */
   const submit = async (content: string) => {
     await board.add(content.slice(0, MAX_MESSAGE_LEN))
-    say('贴上去了')
+    say('成功啦')
   }
 
   return (
@@ -47,7 +47,7 @@ export function BoardPage({ say }: Props) {
               onClick={() => void board.reload()}
               disabled={board.refreshing}
             >
-              {board.refreshing ? '正在连…' : '再试一次'}
+              {board.refreshing ? '正在连接…' : '再试一次'}
             </button>
           </div>
         )}
@@ -58,7 +58,7 @@ export function BoardPage({ say }: Props) {
               <div className="board-empty">
                 还没有人说话
                 <br />
-                上面那个框是空的，随便写。
+                上面那个框是空的，可以随便写哦
               </div>
             ) : (
               <>

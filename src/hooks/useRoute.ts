@@ -15,7 +15,7 @@ const TABLE: Record<string, Route> = {
 }
 
 const TITLE: Record<Route, string> = {
-  home: 'yyyhhh',
+  home: 'YYYHHH',
   board: '留言板 · yyyhhh',
   album: '相册 · yyyhhh',
   plans: '计划清单 · yyyhhh',

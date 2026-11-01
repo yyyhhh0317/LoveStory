@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
 import { repo } from '../lib/repo'
-import { describeError, LOAD_TIMEOUT_MS, type FriendlyError } from '../lib/errors'
 import type { Plan } from '../lib/types'
+import { createListCache, useListResource } from './useListResource'
 
-export type ListPhase = 'loading' | 'ready' | 'error'
+const cache = createListCache<Plan>()
 
-let cache: Plan[] | null = null
+/** 模块级函数：引用稳定，useListResource 的 effect 才不会每轮重拉 */
+const load = (signal?: AbortSignal) => repo.listPlans(signal)
 
 /** 未完成：先加的在前。已完成：刚勾下去的在前 */
 function sortPlans(list: Plan[]): Plan[] {
@@ -20,70 +21,22 @@ function sortPlans(list: Plan[]): Plan[] {
 }
 
 export function usePlans() {
-  const [plans, setPlans] = useState<Plan[]>(() => sortPlans(cache ?? []))
-  const [phase, setPhase] = useState<ListPhase>(() => (cache ? 'ready' : 'loading'))
-  const [error, setError] = useState<FriendlyError | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-
-  const plansRef = useRef(plans)
-  plansRef.current = plans
-  const phaseRef = useRef(phase)
-  phaseRef.current = phase
-  const gen = useRef(0)
-  const inflight = useRef<AbortController | null>(null)
-
-  const commit = useCallback((next: Plan[]) => {
-    const sorted = sortPlans(next)
-    cache = sorted
-    plansRef.current = sorted
-    setPlans(sorted)
-  }, [])
-
-  const reload = useCallback(async () => {
-    const my = ++gen.current
-    setRefreshing(true)
-    inflight.current?.abort()
-    const ac = new AbortController()
-    inflight.current = ac
-
-    if (!cache && phaseRef.current !== 'error') setPhase('loading')
-
-    let timer: number | undefined
-    const timeout = new Promise<never>((_, reject) => {
-      timer = window.setTimeout(() => reject(new Error('TIMEOUT')), LOAD_TIMEOUT_MS)
-    })
-
-    try {
-      const list = await Promise.race([repo.listPlans(ac.signal), timeout])
-      if (my !== gen.current) return
-      commit(list)
-      setError(null)
-      setPhase('ready')
-    } catch (err) {
-      if (my !== gen.current) return
-      setError(describeError(err))
-      setPhase(cache ? 'ready' : 'error')
-    } finally {
-      window.clearTimeout(timer)
-      if (my === gen.current) setRefreshing(false)
-    }
-  }, [commit])
-
-  useEffect(() => {
-    void reload()
-    return () => inflight.current?.abort()
-  }, [reload])
+  const { items, itemsRef, phase, error, refreshing, reload, commit } = useListResource({
+    cache,
+    load,
+    normalize: sortPlans,
+  })
 
   const add = useCallback(
     async (raw: string) => {
       const title = raw.trim()
       if (!title) return null
       const created = await repo.createPlan(title)
-      if (plansRef.current.some((p) => p.id === created.id)) return created
-      commit([...plansRef.current, created])
+      if (itemsRef.current.some((p) => p.id === created.id)) return created
+      commit([...itemsRef.current, created])
       return created
     },
-    [commit]
+    [commit, itemsRef]
   )
 
   /**
@@ -94,24 +47,24 @@ export function usePlans() {
    */
   const toggle = useCallback(
     async (plan: Plan) => {
-      const current = plansRef.current.find((p) => p.id === plan.id)
+      const current = itemsRef.current.find((p) => p.id === plan.id)
       if (!current) return
       const nextDoneAt = current.doneAt ? null : new Date().toISOString()
 
-      commit(plansRef.current.map((p) => (p.id === plan.id ? { ...p, doneAt: nextDoneAt } : p)))
+      commit(itemsRef.current.map((p) => (p.id === plan.id ? { ...p, doneAt: nextDoneAt } : p)))
       try {
         await repo.setPlanDone(plan.id, nextDoneAt !== null)
       } catch (err) {
         commit(
-          plansRef.current.map((p) =>
+          itemsRef.current.map((p) =>
             p.id === plan.id && p.doneAt === nextDoneAt ? { ...p, doneAt: current.doneAt } : p
           )
         )
         throw err
       }
     },
-    [commit]
+    [commit, itemsRef]
   )
 
-  return { plans, phase, error, refreshing, reload, add, toggle }
+  return { plans: items, phase, error, refreshing, reload, add, toggle }
 }

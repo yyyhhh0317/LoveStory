@@ -16,7 +16,6 @@ interface PhotoRow {
   storage_key: string
   width: number
   height: number
-  aspect: number
   taken_at: string
   caption: string | null
   featured_at: string | null
@@ -37,7 +36,6 @@ const toPhoto = (row: PhotoRow): Photo => ({
   storageKey: row.storage_key,
   width: row.width,
   height: row.height,
-  aspect: row.aspect,
   takenAt: row.taken_at,
   caption: row.caption,
   featuredAt: row.featured_at,
@@ -116,7 +114,7 @@ export class SupabaseRepo implements Repo {
      */
     const { data, error } = await this.client
       .from('photos')
-      .select('id,storage_key,width,height,aspect,taken_at,caption,featured_at,created_at,deleted_at')
+      .select('id,storage_key,width,height,taken_at,caption,featured_at,created_at,deleted_at')
       .is('deleted_at', null)
       .order('taken_at', { ascending: true })
     if (error) throw error
@@ -149,7 +147,6 @@ export class SupabaseRepo implements Repo {
         storage_key: input.storageKey,
         width: input.width,
         height: input.height,
-        aspect: input.width / input.height,
         taken_at: input.takenAt,
         caption: input.caption,
       })

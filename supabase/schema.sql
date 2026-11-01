@@ -16,6 +16,9 @@ create table if not exists public.photos (
   storage_key  text not null unique,          -- 存储层里的目录名，不存完整 URL
   width        int  not null,
   height       int  not null,
+  -- aspect 已经没人读也没人写了（宽高比直接用 width / height 算）。
+  -- 列留着是因为老客户端还在 select 它，删列会让那时候的相册整页 400；
+  -- 新建的库里它只是个带默认值的死列，不影响任何东西。
   aspect       double precision not null default 1,
   taken_at     timestamptz not null default now(),  -- EXIF 拍摄时间优先
   caption      text,                          -- 约两句话，可为空

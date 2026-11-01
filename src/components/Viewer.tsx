@@ -278,7 +278,7 @@ export function Viewer({
     const el = frameRef.current
     if (!flew || !origin || !el || !photo) return
     const box = el.getBoundingClientRect()
-    const ar = photo.aspect > 0 ? photo.aspect : photo.width / photo.height || 4 / 3
+    const ar = photo.width / photo.height || 4 / 3
     let w = box.width
     let h = w / ar
     if (h > box.height) {

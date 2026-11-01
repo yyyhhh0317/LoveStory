@@ -3,6 +3,7 @@ import { repo } from '../lib/repo'
 import { hashString, relativeTime } from '../lib/format'
 import { type Message } from '../lib/types'
 import { CloseIcon } from './icons'
+import { Composer, MAX_MESSAGE_LEN } from './Composer'
 
 interface Props {
   photoId: string
@@ -10,8 +11,6 @@ interface Props {
   onClose: () => void
   onCountChange: (delta: number) => void
 }
-
-const MAX_LEN = 300
 
 /**
  * 宽屏（≥901px）时这块面板是常驻的一列，窄屏才靠 .open 当抽屉拉出来。
@@ -41,17 +40,13 @@ function remember(photoId: string, list: Message[]) {
 
 export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
-  const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
   /* 留言读不出来和「真的没有留言」也是两件事，不能都显示成「还没有留言」 */
   const [loadFailed, setLoadFailed] = useState(false)
   const [retryKey, setRetryKey] = useState(0)
-  const [sendFailed, setSendFailed] = useState(false)
   const [wide, setWide] = useState(
     () => typeof window !== 'undefined' && window.matchMedia(WIDE).matches
   )
-  const areaRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -95,7 +90,6 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
       setLoading(true)
     }
     setLoadFailed(false)
-    setDraft('')
 
     repo
       .listMessages(photoId, ac.signal)
@@ -122,33 +116,22 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
     }
   }, [photoId, retryKey, visible])
 
-  const submit = async () => {
-    const content = draft.trim()
-    if (!content || sending) return
-    setSending(true)
-    setSendFailed(false)
-    try {
-      const created = await repo.createMessage(photoId, content.slice(0, MAX_LEN))
-      const next = [...messages, created]
-      setMessages(next)
-      // 顺手把缓存也更新掉，否则翻走再翻回来会看到「少一条」
-      remember(photoId, next)
-      setDraft('')
-      onCountChange(1)
-      if (areaRef.current) areaRef.current.style.height = 'auto'
-      requestAnimationFrame(() => {
-        const el = listRef.current
-        if (el) el.scrollTop = el.scrollHeight
-      })
-    } catch {
-      /*
-       * 草稿不清空（上一行 setDraft('') 没走到），提示另给。
-       * 以前这里只有一句注释，用户点「贴上」没反应，分不清是没发出去还是正在发。
-       */
-      setSendFailed(true)
-    } finally {
-      setSending(false)
-    }
+  /**
+   * 提交一条留言。草稿、发送中、失败提示都在 Composer 里，
+   * 这里只做「这一张照片的留言」该做的事：写库、并进列表与缓存、报数、滚到底。
+   * 抛错会被 Composer 接住 —— 那边负责保住草稿并给提示。
+   */
+  const submit = async (content: string) => {
+    const created = await repo.createMessage(photoId, content.slice(0, MAX_MESSAGE_LEN))
+    const next = [...messages, created]
+    setMessages(next)
+    // 顺手把缓存也更新掉，否则翻走再翻回来会看到「少一条」
+    remember(photoId, next)
+    onCountChange(1)
+    requestAnimationFrame(() => {
+      const el = listRef.current
+      if (el) el.scrollTop = el.scrollHeight
+    })
   }
 
   return (
@@ -224,42 +207,13 @@ export function MessageBoard({ photoId, open, onClose, onCountChange }: Props) {
       </div>
 
       <div className="annot-form">
-        {sendFailed && (
-          <p className="annot-error" role="alert">
-            没贴上去 —— 文字还在框里，再点一次「贴上」
-          </p>
-        )}
-        <textarea
-          ref={areaRef}
-          value={draft}
-          maxLength={MAX_LEN}
+        {/* key 用 photoId：换一张照片就是另一块留言区，草稿不该跟过去 */}
+        <Composer
+          key={photoId}
+          variant="note"
           placeholder="给这张照片留句话吧~"
-          onChange={(e) => {
-            setDraft(e.target.value)
-            const el = e.currentTarget
-            el.style.height = 'auto'
-            el.style.height = `${Math.min(el.scrollHeight, 140)}px`
-          }}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-              e.preventDefault()
-              void submit()
-            }
-          }}
+          onSubmit={submit}
         />
-        <div className="row">
-          <span className="hint">
-            {draft.length > 0 ? `${draft.length} / ${MAX_LEN}` : '匿名'}
-          </span>
-          <button
-            type="button"
-            className="note-submit"
-            disabled={!draft.trim() || sending}
-            onClick={() => void submit()}
-          >
-            {sending ? '上传中…' : '成功~'}
-          </button>
-        </div>
       </div>
     </aside>
   )

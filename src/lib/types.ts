@@ -4,7 +4,6 @@ export interface Photo {
   storageKey: string
   width: number
   height: number
-  aspect: number
   /** 拍摄时间（EXIF 优先，缺失则用上传时间） */
   takenAt: string
   caption: string | null

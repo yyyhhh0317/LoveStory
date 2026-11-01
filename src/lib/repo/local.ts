@@ -103,7 +103,6 @@ export class LocalRepo implements Repo {
       storageKey: input.storageKey,
       width: input.width,
       height: input.height,
-      aspect: input.width / input.height,
       takenAt: input.takenAt,
       caption: input.caption,
       featuredAt: null,

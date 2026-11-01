@@ -32,9 +32,13 @@ export default function App() {
   const [origin, setOrigin] = useState<FrameRect | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
+  /*
+   * 今天这个键只用算一次：下面「今天不再提示」的判断和写入必须是同一个值，
+   * 各自调一次 todayKey() 在跨零点的那一瞬间会得到两个不同的日期。
+   */
   const dayKey = useMemo(() => todayKey(), [])
   const [throwbackClosed, setThrowbackClosed] = useState(
-    () => localStorage.getItem(THROWBACK_KEY) === todayKey()
+    () => localStorage.getItem(THROWBACK_KEY) === dayKey
   )
 
   const toastTimer = useRef<number | null>(null)
@@ -213,6 +217,7 @@ export default function App() {
               {route === 'album' && (
                 <AlbumPage
                   photos={album.photos}
+                  groups={groups}
                   counts={album.counts}
                   phase={album.phase}
                   error={album.error}

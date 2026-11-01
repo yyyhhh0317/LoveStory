@@ -1,15 +1,17 @@
-import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { TimelineItem } from '../TimelineItem'
 import { ConnectFail, LoadingScreen } from '../ScreenStates'
-import { groupByDay } from '../../lib/days'
 import { BookIcon, CloseIcon, HeartIcon, PlusIcon } from '../icons'
 import type { AlbumPhase } from '../../hooks/useAlbum'
+import type { DayGroup } from '../../lib/days'
 import type { FriendlyError } from '../../lib/errors'
 import type { Throwback } from '../../lib/throwback'
 import type { Photo } from '../../lib/types'
 
 interface Props {
   photos: Photo[]
+  /** 由 App 传下来：同一份 photos 只分一次组，页面和沉浸视图共用结果 */
+  groups: DayGroup[]
   counts: Record<string, number>
   phase: AlbumPhase
   error: FriendlyError | null
@@ -32,6 +34,7 @@ let lastScroll = 0
 
 export function AlbumPage({
   photos,
+  groups,
   counts,
   phase,
   error,
@@ -43,7 +46,6 @@ export function AlbumPage({
   onOpenThrowback,
   onDismissThrowback,
 }: Props) {
-  const groups = useMemo(() => groupByDay(photos, 'desc'), [photos])
   const scrollRef = useRef<HTMLDivElement>(null)
 
   /*

@@ -38,7 +38,8 @@ function looksLikePhoto(v: unknown): v is Photo {
     typeof p.id === 'string' &&
     typeof p.storageKey === 'string' &&
     typeof p.takenAt === 'string' &&
-    typeof p.aspect === 'number'
+    typeof p.width === 'number' &&
+    typeof p.height === 'number'
   )
 }
 

@@ -1840,12 +1840,308 @@ html[data-scroll='locked'] .page-scroll {
   padding: calc(var(--sp-6) + env(safe-area-inset-top)) var(--sp-5)
     calc(var(--nav-h) + var(--sp-8) + env(safe-area-inset-bottom));
   overflow: hidden;
+
+  /*
+   * 照片背景的三个旋钮，只在首页这一层定义。
+   *
+   * --home-bg-blur：虚化程度。8px 是「人是人、字是字」的那档 ——
+   *   再大（18px 试过）五官就糊成一团，看不出是张合照了；
+   *   再小照片的细节会跟数字抢注意力。
+   * --home-bg-bleed：出血。blur 会把图像边缘化开成半透明，
+   *   不往外扩就会在四条边上看到一圈发白的缝。
+   * --home-veil：粉色纱的浓度。文字是深色的，纱越淡越好看、越难读；
+   *   56% 是「照片看得出来、数字仍然是 9:1 对比度」的那条线。
+   */
+  --home-bg-blur: 8px;
+  --home-bg-bleed: 20px;
+  --home-veil: 56%;
+}
+
+/*
+ * 照片背景层（照片 → 粉纱 → 文字，三层）。
+ *
+ * 常驻 DOM、只切透明度：关掉的时候元素还在，再打开是纯合成层的淡入，
+ * 不会重新解码、也不会重新光栅那一大团模糊。
+ * 图片本身带内容哈希，跟着 JS 一起发，改图就是换 URL，不用管 SW 缓存。
+ */
+.home-bg {
+  position: absolute;
+  inset: calc(-1 * var(--home-bg-bleed));
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-4) var(--ease);
+}
+
+/* 浓淡是可调的（见 .bg-slider），所以这里是变量不是 1 */
+.page--home[data-bg='photo'] .home-bg {
+  opacity: var(--home-alpha, 1);
+}
+
+/*
+ * 调整时不走过渡：那 700ms 是给「开关一下」用的，
+ * 拖滑杆时它会让浓淡永远慢半拍，手感像在推一团棉花。
+ */
+.page--home.is-editing .home-bg {
+  transition: none;
+}
+
+/*
+ * 照片层。尺寸和位置由 JS 按「原图比例 × 缩放」算成像素写进行内样式：
+ * background-size 撑多大、往哪挪，都是可精确算的富余量，
+ * 这也是 object-fit + object-position 做不到「放大了再上下拖」的原因。
+ */
+.home-bg-photo {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  /* 只模糊和一点点加饱和，不调亮度：原片是亮调，提亮就把人洗没了 */
+  filter: blur(var(--home-bg-blur)) saturate(1.06);
+}
+
+/* 粉纱：把照片压成「底纹」，深色文字才坐得住。
+   上下浓、中间淡 —— 中间是自己最想看的那块，两头是标题和导航的落脚处 */
+.home-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--bg) calc(var(--home-veil) + 18%), transparent) 0%,
+    color-mix(in srgb, var(--bg) var(--home-veil), transparent) 44%,
+    color-mix(in srgb, var(--bg) calc(var(--home-veil) + 12%), transparent) 100%
+  );
+}
+
+/* 右上角的背景开关。做成实心圆片，盖在照片上也认得出这是个按钮 */
+.home-bg-toggle {
+  position: absolute;
+  top: calc(var(--sp-5) + env(safe-area-inset-top));
+  right: var(--sp-5);
+  z-index: 2;
+  width: var(--h-xl);
+  height: var(--h-xl);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-circle);
+  background: var(--surface);
+  color: var(--ink-faint);
+  box-shadow: var(--shadow-soft);
+  /* 长按是功能键：按住 480ms 不能顺手选中文字、不能弹系统菜单、不能双击缩放 */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  transition: color var(--dur-2) var(--ease), background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .home-bg-toggle:hover {
+    color: var(--ink);
+    border-color: var(--line-strong);
+  }
+}
+
+.home-bg-toggle:active {
+  background: var(--surface-2);
+  transform: scale(0.94);
+}
+
+/* 开着照片背景时描边和图标都染上暖色，跟「照片在用」对上号。
+   底色始终是 surface —— 压在照片上必须自成一个实体，不能是半透明的 */
+.home-bg-toggle[aria-pressed='true'] {
+  color: var(--btn);
+  border-color: var(--accent);
+}
+
+/* ---------- 背景调整（长按开关进入） ----------
+ * 不是弹窗、不铺遮罩：面板只占下方一条，上面整页仍是真正的首页背景，
+ * 手指直接拖那张真图层。所见即所得，不存在「预览和退出去不一样」。
+ */
+.home-bg-drag {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  cursor: grab;
+  /* 拖动手势自己处理，别让浏览器拿去滚页或下拉刷新 */
+  touch-action: none;
+  animation: fade-in var(--dur-3) var(--ease);
+}
+
+.home-bg-drag:active {
+  cursor: grabbing;
+}
+
+.home-bg-drag:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.home-bg-drag-hint {
+  position: absolute;
+  top: calc(var(--sp-5) + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-ui);
+  color: var(--ink-soft);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.bg-panel {
+  position: absolute;
+  /*
+   * 宽屏上不能横贯整屏：max() 两边一起收，560px 封顶且不产生负宽度。
+   * 不用 left:50% + translateX —— sheet-in 的关键帧里带 transform，
+   * 动画一结束基准就跳回原位，看着像抖了一下。
+   */
+  left: max(var(--sp-3), calc(50% - 280px));
+  right: max(var(--sp-3), calc(50% - 280px));
+  bottom: calc(var(--nav-h) + var(--sp-3) + env(safe-area-inset-bottom));
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+  animation: sheet-in var(--dur-3) var(--ease);
+}
+
+.bg-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.bg-panel-title {
+  margin: 0;
+  font-size: var(--fs-meta);
+  letter-spacing: var(--ls-meta);
+  color: var(--ink-faint);
+}
+
+.bg-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+}
+
+.bg-panel-actions .text-btn {
+  height: var(--h-md);
+  padding: 0 var(--sp-4);
+}
+
+/* 选图：一条横向滑动的缩略图。滑动条藏起来，靠边缘露出的半张暗示还能滑 */
+.bg-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: var(--sp-2);
+  scrollbar-width: none;
+}
+
+.bg-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.bg-tile {
+  flex: none;
+  width: 62px;
+  height: 78px;
+  border: 1.5px solid transparent;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+  transition: border-color var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
+}
+
+.bg-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bg-tile-blank {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-deep);
+}
+
+.bg-tile:active {
+  transform: scale(0.96);
+}
+
+/* 选中的那张：描边 + 一圈淡淡的底光，比只换个边框更容易一眼找到 */
+.bg-tile.is-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bg-tile:hover {
+    border-color: var(--line-strong);
+  }
+
+  .bg-tile.is-on:hover {
+    border-color: var(--accent);
+  }
+}
+
+.bg-strip-empty {
+  font-size: var(--fs-meta);
+  letter-spacing: var(--ls-meta);
+  color: var(--ink-ghost);
+  white-space: nowrap;
+}
+
+.bg-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--fs-meta);
+  letter-spacing: var(--ls-meta);
+  color: var(--ink-faint);
+}
+
+/* 原生滑块只染一个 accent-color：轨道和滑块的形状交给系统，
+   那套在 iOS / 安卓上都是最合手的，自绘反而更难按 */
+.bg-slider input[type='range'] {
+  flex: 1;
+  height: var(--h-md);
+  accent-color: var(--btn);
+  background: transparent;
+}
+
+.bg-slider b {
+  flex: none;
+  min-width: 4ch;
+  text-align: right;
+  font-weight: 400;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .home-note {
   position: absolute;
   left: 50%;
   bottom: calc(var(--nav-h) + var(--sp-5) + env(safe-area-inset-bottom));
+  z-index: 1;
   transform: translateX(-50%);
   margin: 0;
   font-size: var(--fs-micro);
@@ -1861,6 +2157,12 @@ html[data-scroll='locked'] .page-scroll {
   align-items: center;
   gap: var(--sp-5);
   width: 100%;
+}
+
+/* 要压在照片层上面：.home-bg 是定位元素，静态的 .timer 会被它盖住 */
+.page--home .timer {
+  position: relative;
+  z-index: 1;
 }
 
 .timer-kicker {
@@ -1921,6 +2223,15 @@ html[data-scroll='locked'] .page-scroll {
   font-size: var(--fs-meta);
   letter-spacing: var(--ls-meta);
   color: var(--ink-ghost);
+}
+
+/*
+ * 照片背景开着的时候，这一行必须抬一档到 ink-faint。
+ * --ink-ghost 的对比度只有 2.6（约定里只准做装饰），在纯粉底上勉强能读，
+ * 压到照片上就彻底散了 —— 而这行写着关系起点，是首页唯一的「注解」。
+ */
+.page--home[data-bg='photo'] .timer-foot {
+  color: var(--ink-faint);
 }
 
 /* ---------- 相册时间轴（中轴 + 左右交替） ----------

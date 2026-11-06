@@ -201,7 +201,7 @@ export default function App() {
 
       <div className="app-shell">
         {route === 'home' ? (
-          <HomePage />
+          <HomePage photos={album.photos} />
         ) : (
           <div className="page">
             <PageHeader

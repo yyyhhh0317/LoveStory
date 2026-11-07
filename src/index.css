@@ -1842,19 +1842,19 @@ html[data-scroll='locked'] .page-scroll {
   overflow: hidden;
 
   /*
-   * 照片背景的三个旋钮，只在首页这一层定义。
+   * 照片背景的旋钮，只在首页这一层定义。
+   * 前两个由 HomePage 按「清晰度」算好写成行内变量（见 lib/homeBg 的
+   * blurOf / veilOf），这里写的是它们缺席时的兜底值。
    *
-   * --home-bg-blur：虚化程度。8px 是「人是人、字是字」的那档 ——
-   *   再大（18px 试过）五官就糊成一团，看不出是张合照了；
-   *   再小照片的细节会跟数字抢注意力。
-   * --home-bg-bleed：出血。blur 会把图像边缘化开成半透明，
-   *   不往外扩就会在四条边上看到一圈发白的缝。
-   * --home-veil：粉色纱的浓度。文字是深色的，纱越淡越好看、越难读；
-   *   56% 是「照片看得出来、数字仍然是 9:1 对比度」的那条线。
+   * --home-bg-blur：虚化半径。0 = 原图，32px = 只剩几块颜色。
+   * --home-bg-bleed：出血。blur 会把图像边缘化开成半透明，不往外扩就会
+   *   在四条边上看到一圈白缝 —— 所以取的比最大模糊半径还宽一圈。
+   * --home-veil：粉色纱的浓度。照片清楚时纱让开，糊了才压回来托住文字。
+   *   （文字脚下那块另有底衬：--home-plate，见 .timer::before。）
    */
   --home-bg-blur: 8px;
-  --home-bg-bleed: 20px;
-  --home-veil: 56%;
+  --home-bg-bleed: 48px;
+  --home-veil: 28%;
 }
 
 /*
@@ -1873,14 +1873,14 @@ html[data-scroll='locked'] .page-scroll {
   transition: opacity var(--dur-4) var(--ease);
 }
 
-/* 浓淡是可调的（见 .bg-slider），所以这里是变量不是 1 */
+/* 照片永远按原样铺着，浓淡交给模糊半径去表达（见 .bg-slider 的清晰度） */
 .page--home[data-bg='photo'] .home-bg {
-  opacity: var(--home-alpha, 1);
+  opacity: 1;
 }
 
 /*
  * 调整时不走过渡：那 700ms 是给「开关一下」用的，
- * 拖滑杆时它会让浓淡永远慢半拍，手感像在推一团棉花。
+ * 拖滑杆时它会让模糊永远慢半拍，手感像在推一团棉花。
  */
 .page--home.is-editing .home-bg {
   transition: none;
@@ -2159,10 +2159,40 @@ html[data-scroll='locked'] .page-scroll {
   width: 100%;
 }
 
-/* 要压在照片层上面：.home-bg 是定位元素，静态的 .timer 会被它盖住 */
+/* 要压在照片层上面：.home-bg 是定位元素，静态的 .timer 会被它盖住。
+   宽度改成贴合内容：底衬要包住三行文字，撑满 100% 会变成一条横贯的带子 */
 .page--home .timer {
   position: relative;
   z-index: 1;
+  width: fit-content;
+  max-width: 100%;
+}
+
+/*
+ * 计时器的底衬：一块和照片无关的粉白磨砂面。
+ *
+ * 为什么必须有它：文字是深色系，照片上任意一块都可能是深绿树叶或近黑背景，
+ * 深字压深景没有数值可调 —— 只有垫一层固定亮度，对比度才是「算得出」的。
+ * 浓度由 --home-plate 驱动（HomePage 按 plateOf(清晰度) 写入，粉底态为 0），
+ * 曲线在 lib/homeBg 里按最坏照片逐档验算过 4.5:1。
+ *
+ * z-index: -1 不会掉到照片后面：.timer 自带 z-index:1，是个独立 stacking
+ * context，这层只会垫在文字脚下、压在照片之上。
+ * 背景色带过渡：开关照片那一下它跟着 .home-bg 一起淡入，不闪；调整时
+ * （is-editing）关掉过渡，拖滑杆才跟手。
+ */
+.page--home .timer::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-6));
+  border-radius: var(--r-xl);
+  background: color-mix(in srgb, var(--surface) var(--home-plate, 0%), transparent);
+  transition: background-color var(--dur-3) var(--ease);
+}
+
+.page--home.is-editing .timer::before {
+  transition: none;
 }
 
 .timer-kicker {
@@ -2226,12 +2256,16 @@ html[data-scroll='locked'] .page-scroll {
 }
 
 /*
- * 照片背景开着的时候，这一行必须抬一档到 ink-faint。
- * --ink-ghost 的对比度只有 2.6（约定里只准做装饰），在纯粉底上勉强能读，
- * 压到照片上就彻底散了 —— 而这行写着关系起点，是首页唯一的「注解」。
+ * 照片态下，单位与日期行抬到 ink-soft。
+ *
+ * 不是装饰性抬色，是底衬曲线的另一半：ink-faint 的对比度余量只有 4.6，
+ * 垫在 26%（清晰度 0）那档底衬上刚好压线、没有冗余；ink-soft 的 6.0
+ * 在同一块底衬上有 4.5 以上。数字（ink，9.0）和标题（本来就是 ink-soft）
+ * 不动，字重也保持 300 —— 底衬把背景钉住之后，细体站得住。
  */
+.page--home[data-bg='photo'] .tt-unit,
 .page--home[data-bg='photo'] .timer-foot {
-  color: var(--ink-faint);
+  color: var(--ink-soft);
 }
 
 /* ---------- 相册时间轴（中轴 + 左右交替） ----------

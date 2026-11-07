@@ -5,7 +5,7 @@ import { HomeBgPanel } from '../HomeBgPanel'
 import { PhotoIcon } from '../icons'
 import { useImgUrl } from '../../hooks/useImgUrl'
 import { isRemote } from '../../lib/repo'
-import { BG_ON_KEY, DEFAULT_FIT, readFit, writeFit, type HomeBgFit } from '../../lib/homeBg'
+import { BG_ON_KEY, DEFAULT_FIT, blurOf, plateOf, readFit, veilOf, writeFit, type HomeBgFit } from '../../lib/homeBg'
 import type { Photo } from '../../lib/types'
 import builtinBg from '../../assets/home-bg.jpg'
 
@@ -111,7 +111,7 @@ export function HomePage({ photos }: Props) {
     im.onerror = () => {
       if (fitRef.current.kind !== 'album') return
       const cur = fitRef.current
-      setFit({ ...DEFAULT_FIT, alpha: cur.alpha, zoom: cur.zoom })
+      setFit({ ...DEFAULT_FIT, clarity: cur.clarity, zoom: cur.zoom })
     }
     im.src = src
     return () => {
@@ -131,8 +131,7 @@ export function HomePage({ photos }: Props) {
     /* 还没量到：先铺满居中，量到的那一帧再换成精确值 */
     if (!nat.w || !nat.h || !box.w || !box.h) {
       return { backgroundSize: 'cover', backgroundPosition: 'center' }
-    }
-    const s = Math.max(box.w / nat.w, box.h / nat.h) * fit.zoom
+    }    const s = Math.max(box.w / nat.w, box.h / nat.h) * fit.zoom
     const w = nat.w * s
     const h = nat.h * s
     /*
@@ -230,11 +229,25 @@ export function HomePage({ photos }: Props) {
     writeFit(fitRef.current)
   }
 
+  /*
+   * 清晰度驱动三件事：照片的模糊半径、粉纱浓度、计时器底衬的不透明度。
+   * 前两件管整屏氛围，第三件只管文字脚下那块 —— 一起算好写成 CSS
+   * 变量，样式表里就只剩「怎么用」，不用再记公式。
+   *
+   * 底衬只在照片态出现：粉底上文字本来就有设计好的对比度，垫一层
+   * 只会凭空多一块色斑。开关切换时它跟着 .home-bg 一起过渡，不闪。
+   */
+  const bgVars = {
+    '--home-bg-blur': `${blurOf(fit.clarity).toFixed(1)}px`,
+    '--home-veil': `${veilOf(fit.clarity).toFixed(1)}%`,
+    '--home-plate': `${(on ? plateOf(fit.clarity) : 0).toFixed(1)}%`,
+  } as CSSProperties
+
   return (
     <div
       className={`page page--home${editing ? ' is-editing' : ''}`}
       data-bg={on ? 'photo' : 'pink'}
-      style={{ '--home-alpha': fit.alpha } as CSSProperties}
+      style={bgVars}
     >
       {/* 装饰层：纯视觉，读屏不需要知道背景是什么 */}
       <div className="home-bg" ref={boxRef} aria-hidden="true">

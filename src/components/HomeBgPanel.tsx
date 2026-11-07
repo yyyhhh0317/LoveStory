@@ -1,5 +1,5 @@
 import { useImgUrl } from '../hooks/useImgUrl'
-import { MAX_ZOOM, MIN_ALPHA, type HomeBgFit } from '../lib/homeBg'
+import { MAX_ZOOM, type HomeBgFit } from '../lib/homeBg'
 import type { Photo } from '../lib/types'
 import builtinBg from '../assets/home-bg.jpg'
 
@@ -47,10 +47,10 @@ function AlbumTile({
  * 所以不存在「预览里是这样、退出去不一样」。
  */
 export function HomeBgPanel({ fit, photos, onChange, onDone }: Props) {
-  const pct = Math.round(fit.alpha * 100)
+  const clarityPct = Math.round(fit.clarity * 100)
   const zoomPct = Math.round(fit.zoom * 100)
 
-  /* 换照片时位置和缩放都回默认：上一张的构图对下一张没有意义，浓淡留着 */
+  /* 换照片时位置和缩放都回默认：上一张的构图对下一张没有意义，清晰度留着 */
   const pick = (next: Pick<HomeBgFit, 'kind' | 'key'>) =>
     onChange({ ...fit, ...next, x: 50, y: 50, zoom: 1 })
 
@@ -107,16 +107,16 @@ export function HomeBgPanel({ fit, photos, onChange, onDone }: Props) {
       </label>
 
       <label className="bg-slider">
-        <span>不透明度</span>
+        <span>清晰度</span>
         <input
           type="range"
-          min={Math.round(MIN_ALPHA * 100)}
+          min={0}
           max={100}
           step={1}
-          value={pct}
-          onChange={(e) => onChange({ ...fit, alpha: Number(e.target.value) / 100 })}
+          value={clarityPct}
+          onChange={(e) => onChange({ ...fit, clarity: Number(e.target.value) / 100 })}
         />
-        <b>{pct}%</b>
+        <b>{clarityPct}%</b>
       </label>
     </div>
   )

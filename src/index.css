@@ -2159,11 +2159,57 @@ html[data-scroll='locked'] .page-scroll {
   width: 100%;
 }
 
-/* 要压在照片层上面：.home-bg 是定位元素，静态的 .timer 会被它盖住。
-   宽度改成贴合内容：底衬要包住三行文字，撑满 100% 会变成一条横贯的带子 */
-.page--home .timer {
-  position: relative;
+/*
+ * 计时器的「舞台」：一块与 .page--home 内容区完全重合的定位画布。
+ * 计时器在它里面按 tx/ty 百分比定位（50/50 = 正中，和从前 flex 居中
+ * 那版逐像素一致），舞台只负责给百分比一个正确的参照系。
+ * 舞台自身不接指针，只有计时器接 —— 手势才能精确落在文字块上。
+ */
+.home-stage {
+  position: absolute;
+  inset: calc(var(--sp-6) + env(safe-area-inset-top)) var(--sp-5)
+    calc(var(--nav-h) + var(--sp-8) + env(safe-area-inset-bottom));
   z-index: 1;
+  pointer-events: none;
+}
+
+/*
+ * 计时器的可拖外壳。中心跟随 tx/ty，translate 把左上角坐标变成中心坐标。
+ * 拖动时 user-select 关掉：按住大数字划过屏幕，不该顺带选中一串文字。
+ */
+.home-stage .timer-pos {
+  position: absolute;
+  /*
+   * 缩放挂在同一个 transform 上（--timer-scale，面板里「计时器大小」驱动）：
+   * transform 不参与布局、不触发重排，滑杆拖动才跟得上；
+   * 拖动钳制量的是 getBoundingClientRect，已含缩放，无需两处对账。
+   */
+  transform: translate(-50%, -50%) scale(var(--timer-scale, 1));
+  transform-origin: center;
+  pointer-events: auto;
+  cursor: grab;
+  /* 拖动手势自己处理，别让浏览器拿去滚页或下拉刷新 */
+  touch-action: none;
+  border-radius: var(--r-xl);
+}
+
+.home-stage.is-dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.home-stage.is-dragging .timer-pos {
+  cursor: grabbing;
+}
+
+/* 键盘用户拖不到的补偿：聚焦后方向键微调（见 HomePage 的 onKeyDown） */
+.home-stage .timer-pos:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+/* 计时器在舞台里贴合内容：底衬要包住三行，撑满会变成横贯的带子 */
+.page--home .timer {
   width: fit-content;
   max-width: 100%;
 }

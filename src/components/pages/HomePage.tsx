@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { TogetherTimer } from '../TogetherTimer'
 import { HomeBgPanel } from '../HomeBgPanel'
 import { PhotoIcon } from '../icons'
@@ -229,6 +229,89 @@ export function HomePage({ photos }: Props) {
     writeFit(fitRef.current)
   }
 
+  /* ---------- 拖动计时器 ----------
+   *
+   * 只在平时生效：编辑模式里有全屏的背景拖拽层（z-index 3）盖在上面，
+   * 那时按住计时器拖的是背景 —— 「编辑模式在调背景」这个语义是连贯的。
+   */
+
+  const stageRef = useRef<HTMLDivElement>(null)
+  const [timerDragging, setTimerDragging] = useState(false)
+  /* 起手时把舞台和计时器的几何量一次量好，拖动全程只用纯算术 */
+  const timerDragRef = useRef<{
+    px: number
+    py: number
+    cx: number
+    cy: number
+    lo: { x: number; y: number }
+    hi: { x: number; y: number }
+    stageW: number
+    stageH: number
+    stageL: number
+    stageT: number
+  } | null>(null)
+
+  const startTimerDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const stage = stageRef.current
+    if (!stage) return
+    const s = stage.getBoundingClientRect()
+    const t = e.currentTarget.getBoundingClientRect()
+    /* 阻止按住文字时的选中；焦点手动补上（preventDefault 会吞掉它） */
+    e.preventDefault()
+    e.currentTarget.focus()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setTimerDragging(true)
+    const halfW = t.width / 2
+    const halfH = t.height / 2
+    timerDragRef.current = {
+      px: e.clientX,
+      py: e.clientY,
+      cx: t.left + halfW,
+      cy: t.top + halfH,
+      /* 中心被钳在舞台内：计时器整个块永远完整可见，不会拖出一半去 */
+      lo: { x: s.left + Math.min(halfW, s.width / 2), y: s.top + Math.min(halfH, s.height / 2) },
+      hi: { x: s.right - Math.min(halfW, s.width / 2), y: s.bottom - Math.min(halfH, s.height / 2) },
+      stageW: s.width,
+      stageH: s.height,
+      stageL: s.left,
+      stageT: s.top,
+    }
+  }
+
+  const moveTimerDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = timerDragRef.current
+    if (!d) return
+    const clampN = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+    const cx = clampN(d.cx + (e.clientX - d.px), d.lo.x, d.hi.x)
+    const cy = clampN(d.cy + (e.clientY - d.py), d.lo.y, d.hi.y)
+    setFit((cur) => ({
+      ...cur,
+      tx: clampN(((cx - d.stageL) / d.stageW) * 100, 0, 100),
+      ty: clampN(((cy - d.stageT) / d.stageH) * 100, 0, 100),
+    }))
+  }
+
+  const endTimerDrag = () => {
+    if (!timerDragRef.current) return
+    timerDragRef.current = null
+    setTimerDragging(false)
+    writeFit(fitRef.current)
+  }
+
+  /* 拖不到的人用方向键补：和背景拖拽层同一套手势约定 */
+  const moveTimerKeys = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 10 : 2
+    const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
+    const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
+    if (!dx && !dy) return
+    e.preventDefault()
+    setFit((cur) => ({
+      ...cur,
+      tx: clamp(cur.tx + dx, 0, 100),
+      ty: clamp(cur.ty + dy, 0, 100),
+    }))
+  }
+
   /*
    * 清晰度驱动三件事：照片的模糊半径、粉纱浓度、计时器底衬的不透明度。
    * 前两件管整屏氛围，第三件只管文字脚下那块 —— 一起算好写成 CSS
@@ -241,6 +324,7 @@ export function HomePage({ photos }: Props) {
     '--home-bg-blur': `${blurOf(fit.clarity).toFixed(1)}px`,
     '--home-veil': `${veilOf(fit.clarity).toFixed(1)}%`,
     '--home-plate': `${(on ? plateOf(fit.clarity) : 0).toFixed(1)}%`,
+    '--timer-scale': fit.tscale.toFixed(2),
   } as CSSProperties
 
   return (
@@ -300,7 +384,23 @@ export function HomePage({ photos }: Props) {
         </div>
       )}
 
-      <TogetherTimer />
+      <div ref={stageRef} className={`home-stage${timerDragging ? ' is-dragging' : ''}`}>
+        <div
+          className="timer-pos"
+          role="group"
+          aria-label="计时器位置：拖动，或用方向键微调"
+          tabIndex={0}
+          style={{ left: `${fit.tx}%`, top: `${fit.ty}%` }}
+          onPointerDown={startTimerDrag}
+          onPointerMove={moveTimerDrag}
+          onPointerUp={endTimerDrag}
+          onPointerCancel={endTimerDrag}
+          onLostPointerCapture={endTimerDrag}
+          onKeyDown={moveTimerKeys}
+        >
+          <TogetherTimer />
+        </div>
+      </div>
 
       {!isRemote && (
         <p className="home-note" title="尚未配置 Supabase，数据只存在这台设备上">

@@ -31,6 +31,16 @@ export interface HomeBgFit {
    * 既不是原图也不好看）。
    */
   clarity: number
+  /**
+   * 计时器中心在内容区里的位置，0–100，50/50 = 居中。
+   *
+   * 存百分比而不是像素：手机和桌面宽度差三倍，存像素换台设备就飞出屏。
+   * 百分比在不同宽度上只是「相对位置一样」，落点仍然合理。
+   */
+  tx: number
+  ty: number
+  /** 计时器整体缩放，1 = 原始大小。走 transform，不参与布局 */
+  tscale: number
 }
 
 export const BG_ON_KEY = 'yyyhhh:home-bg'
@@ -41,6 +51,15 @@ export const MAX_ZOOM = 2
 
 /** 清晰度 0 时的模糊半径。再大（40px）就只剩几块颜色，照片等于没了 */
 export const MAX_BLUR = 32
+
+/**
+ * 计时器大小的上下限。
+ *
+ * 下限 50%：再小「从 3 月 17 日起」那行 12px 就只剩 6px，中文必糊；
+ * 上限 150%：手机上计时器已近内容区同宽，再大纯廋溢出屏幕。
+ */
+export const MIN_TSCALE = 0.5
+export const MAX_TSCALE = 1.5
 
 /**
  * 清晰度 → 模糊半径，线性。
@@ -84,6 +103,10 @@ export const DEFAULT_FIT: HomeBgFit = {
   zoom: 1,
   /* 0.75 → 8px，和从前的定值一致：进来第一眼不该跟以前差太多 */
   clarity: 0.75,
+  /* 50/50 = 内容区正中，和 flex 居中那版逐像素一致 */
+  tx: 50,
+  ty: 50,
+  tscale: 1,
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -118,6 +141,12 @@ export function readFit(): HomeBgFit {
               Number.isFinite((v as { alpha: number }).alpha)
             ? clamp((v as { alpha: number }).alpha, 0, 1)
             : DEFAULT_FIT.clarity,
+      tx: typeof v.tx === 'number' && Number.isFinite(v.tx) ? clamp(v.tx, 0, 100) : 50,
+      ty: typeof v.ty === 'number' && Number.isFinite(v.ty) ? clamp(v.ty, 0, 100) : 50,
+      tscale:
+        typeof v.tscale === 'number' && Number.isFinite(v.tscale)
+          ? clamp(v.tscale, MIN_TSCALE, MAX_TSCALE)
+          : 1,
     }
   } catch {
     return DEFAULT_FIT

@@ -1,5 +1,5 @@
 import { useImgUrl } from '../hooks/useImgUrl'
-import { MAX_ZOOM, type HomeBgFit } from '../lib/homeBg'
+import { MAX_ZOOM, MAX_TSCALE, MIN_TSCALE, type HomeBgFit } from '../lib/homeBg'
 import type { Photo } from '../lib/types'
 import builtinBg from '../assets/home-bg.jpg'
 
@@ -49,6 +49,7 @@ function AlbumTile({
 export function HomeBgPanel({ fit, photos, onChange, onDone }: Props) {
   const clarityPct = Math.round(fit.clarity * 100)
   const zoomPct = Math.round(fit.zoom * 100)
+  const tscalePct = Math.round(fit.tscale * 100)
 
   /* 换照片时位置和缩放都回默认：上一张的构图对下一张没有意义，清晰度留着 */
   const pick = (next: Pick<HomeBgFit, 'kind' | 'key'>) =>
@@ -117,6 +118,25 @@ export function HomeBgPanel({ fit, photos, onChange, onDone }: Props) {
           onChange={(e) => onChange({ ...fit, clarity: Number(e.target.value) / 100 })}
         />
         <b>{clarityPct}%</b>
+      </label>
+
+      {/*
+       * 计时器自己的大小，和上面背景的「缩放」是两回事：
+       * 那个放大的是照片（可拖余量随之变多），这个只变文字块。
+       * 走 transform：不触发重排，拖动时才跟得上；
+       * 拖动钳制用的是 getBoundingClientRect，已含缩放，无需额外处理。
+       */}
+      <label className="bg-slider">
+        <span>计时器大小</span>
+        <input
+          type="range"
+          min={Math.round(MIN_TSCALE * 100)}
+          max={Math.round(MAX_TSCALE * 100)}
+          step={5}
+          value={tscalePct}
+          onChange={(e) => onChange({ ...fit, tscale: Number(e.target.value) / 100 })}
+        />
+        <b>{tscalePct}%</b>
       </label>
     </div>
   )

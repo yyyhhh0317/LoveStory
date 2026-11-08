@@ -75,6 +75,40 @@ export default function App() {
   const starred = useMemo(() => starredOrder(album.photos), [album.photos])
 
   /*
+   * 星标视图的翻页序列要**冻在打开它的那一刻**。
+   *
+   * 不冻的话，在集子里点一下星星取消收藏，starred 立刻少一张，findIndex
+   * 返回 -1、index 掉到 0，人就被弹到集子的第一张去了 —— 明明只想撤掉
+   * 一颗星，眼前却换成了另一张照片。冻住之后，取消收藏只是那颗星灭了，
+   * 照片还在眼前，翻页范围也不变；真删掉的照片仍要滤掉（见下面），
+   * 否则会翻到一张已经移出相册的照片。
+   *
+   * **冻的是 id，不是照片对象。** 冻对象的话，取消星标后那颗星还是亮的、
+   * 改完简介还显示旧文案 —— 详情页会以为写失败了。
+   */
+  const [starSeq, setStarSeq] = useState<string[] | null>(null)
+  /*
+   * openPhoto 必须保持引用稳定（TimelineItem 靠 memo 免于重渲染），所以
+   * 不能把 starred 放进它的依赖里；改用 ref 取「此刻的集子」。
+   * 写发生在渲染期，读只发生在点击回调里 —— 那时这一轮早已提交。
+   */
+  const starredRef = useRef<Photo[]>([])
+  starredRef.current = starred
+
+  const starredSequence = useMemo(() => {
+    if (!starSeq) return starred
+    const byId = new Map(album.photos.map((p) => [p.id, p]))
+    const kept: Photo[] = []
+    for (const id of starSeq) {
+      const photo = byId.get(id)
+      /* 删掉的照片不能再翻：它已经不在相册里，图也请求不到了 */
+      if (photo) kept.push(photo)
+    }
+    /* 整串都被删光了就回到当前的集子，空数组交给外面那个 effect 关详情页 */
+    return kept.length ? kept : starred
+  }, [starSeq, starred, album.photos])
+
+  /*
    * 详情页翻的是「你从哪儿点进来的那串照片」。
    * 星标视图点开就只在星标里翻 —— 否则用户明明在收藏集里，
    * 左右划两下却滑进了没收藏的照片，那个「集子」就不成立了。
@@ -83,9 +117,14 @@ export default function App() {
     viewer?.mode === 'throwback'
       ? (throwback?.photos ?? [])
       : viewer?.mode === 'starred'
-        ? starred
+        ? starredSequence
         : timeline
-  const index = viewer ? Math.max(0, sequence.findIndex((p) => p.id === viewer.photoId)) : 0
+  /*
+   * -1 现在只剩一种可能：刚删掉当前这张、deletePhoto 正在切到邻居的那一帧。
+   * 退到 0 只是兜底，星标那条路不会再走到这里了。
+   */
+  const found = viewer ? sequence.findIndex((p) => p.id === viewer.photoId) : 0
+  const index = found >= 0 ? found : 0
 
   /* 弹层打开时锁住页面滚动。用计数器的版本，两个弹层叠加也不会提前解锁 */
   useScrollLock(Boolean(viewer) || uploadOpen)
@@ -108,6 +147,11 @@ export default function App() {
     ) => {
       rememberFocus()
       setOrigin(toFrameRect(rect))
+      /*
+       * 只在从星标点开时拍快照；其他入口一律清掉，
+       * 免得下次进详情页还拿着上一次那个集子。
+       */
+      setStarSeq(from === 'starred' ? starredRef.current.map((p) => p.id) : null)
       setViewer({ mode: from, photoId: photo.id })
     },
     [rememberFocus]
@@ -117,6 +161,8 @@ export default function App() {
     if (!throwback) return
     rememberFocus()
     setOrigin(null)
+    /* 走的是那年今日，别把上一次打开星标时拍的快照带进来 */
+    setStarSeq(null)
     setViewer({ mode: 'throwback', photoId: throwback.photos[0].id })
   }, [throwback, rememberFocus])
 
@@ -127,6 +173,8 @@ export default function App() {
   const closeViewer = useCallback(() => {
     setViewer(null)
     setOrigin(null)
+    /* 集子只在这一次打开期间有效，关掉就丢，免得下次被旧快照影响 */
+    setStarSeq(null)
     const back = returnFocus.current
     returnFocus.current = null
     if (back && document.contains(back)) back.focus({ preventScroll: true })
@@ -285,7 +333,20 @@ export default function App() {
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         onSubmit={handleUpload}
-        onDone={(count) => say(`收录 ${count} 张`)}
+        /*
+         * 有失败时一般由面板自己说明；只有面板已经关掉（上传途中被关）
+         * 才会走到这里，那会儿他看不到面板里的提示，得让 toast 说一句。
+         */
+        onDone={(created, failed) =>
+          failed
+            ? say(
+                created
+                  ? `收录 ${created} 张，还有 ${failed} 张没传上去`
+                  : `${failed} 张没传上去，回头再试一次`,
+                3800
+              )
+            : say(`收录 ${created} 张`)
+        }
       />
 
       {toastVisible.mounted && (

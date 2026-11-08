@@ -78,7 +78,22 @@ export function readAlbumCache(): AlbumSnapshot | null {
  * 合并会把已经删掉的照片留成幽灵，那才是真正的画布错位来源。
  */
 export function writeAlbumCache(photos: Photo[], counts: Record<string, number>): void {
-  if (!photos.length) return
+  /*
+   * 空相册要**主动清掉**旧快照，不能直接 return。
+   *
+   * 直接 return 的话，删掉最后一张之后旧快照仍留在本地：下次打开会先把
+   * 已经删掉的照片画出来，等接口回来才消失；离线时它们会一直在。
+   * 清掉之后仍然满足「空数组不算缓存命中」—— 读的时候干脆读不到东西，
+   * 于是走加载页，而不是拿一份空数据冒充「真的没有」。
+   */
+  if (!photos.length) {
+    try {
+      localStorage.removeItem(KEY)
+    } catch {
+      // 隐私模式禁写：忽略，主流程不受影响
+    }
+    return
+  }
 
   // 只留还活着的照片的计数，免得徽标挂到别的照片上
   const live = new Set(photos.map((p) => p.id))

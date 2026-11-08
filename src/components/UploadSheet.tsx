@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { processImage } from '../lib/image'
 import { fromDateInputValue, toDateInputValue, uid } from '../lib/format'
 import { usePresence } from '../lib/presence'
@@ -21,7 +21,13 @@ interface Props {
   open: boolean
   onClose: () => void
   onSubmit: (items: NewPhotoInput[]) => Promise<{ created: Photo[]; failed: NewPhotoInput[] }>
-  onDone: (count: number) => void
+  /**
+   * 这一轮上传结束时的汇总。
+   *
+   * failed 为 0 时一定会调用；有失败时只在**面板已经关掉**的情况下调用 ——
+   * 面板开着的时候它自己会把失败项和提示摆出来，再弹一条 toast 是重复噪音。
+   */
+  onDone: (created: number, failed: number) => void
 }
 
 export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
@@ -36,19 +42,38 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
   const { mounted, closing } = usePresence(open)
 
   /*
-   * 清场要等真正卸载之后再做。
-   * 挂在 open 上的话，按下关闭的那一帧缩略图就先没了，
-   * 面板还要淡 240ms，中间那段是一个空壳 —— 比不做动画更难看。
+   * 异步任务回来时得知道「现在面板还开着吗」「还在忙吗」。
+   * 这两件事在 setTimeout / await 之后读 state 拿到的是旧值，所以各留一份 ref。
    */
-  useEffect(() => {
-    if (mounted) return
+  const openRef = useRef(open)
+  openRef.current = open
+  const busyRef = useRef(busy)
+  busyRef.current = busy
+
+  const resetPanel = useCallback(() => {
     urlsRef.current.forEach((u) => URL.revokeObjectURL(u))
     urlsRef.current = []
     setItems([])
     setError(null)
     setProgress(null)
     setBusy(false)
-  }, [mounted])
+  }, [])
+
+  /*
+   * 清场要等真正卸载之后再做。
+   * 挂在 open 上的话，按下关闭的那一帧缩略图就先没了，
+   * 面板还要淡 240ms，中间那段是一个空壳 —— 比不做动画更难看。
+   *
+   * 但**上传还在跑的时候不能清**：清了之后 Promise 回来会往空列表里
+   * 追加（再打开就看到几张凭空出现的待传项），失败提示也写进了一个
+   * 已经空掉的面板。这里先放它一马，任务自己收尾时会清（成功）
+   * 或者把失败项留着（失败，下次打开继续传）。
+   */
+  useEffect(() => {
+    if (mounted) return
+    if (busyRef.current) return
+    resetPanel()
+  }, [mounted, resetPanel])
 
   /* 面板只有「点遮罩 / 点 X / 点先不传」三条关闭路径，键盘用户被关在里面 */
   useEffect(() => {
@@ -118,7 +143,17 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
       const { created, failed } = await onSubmit(payload)
 
       if (!failed.length) {
-        onDone(created.length)
+        /*
+         * 全部成功。
+         *
+         * 面板还开着时**不能在这里清**：那会让待传列表在 260ms 的淡出
+         * 途中先塌掉，看起来像闪了一下。交给淡出结束后那次清场去做
+         * （那时 busy 已经是 false，不会被「还在忙」挡住）。
+         * 面板已经关掉的（上传途中被关）必须现在清，否则下次打开是
+         * 一排「已就绪」，像没传过一样。
+         */
+        if (!openRef.current) resetPanel()
+        onDone(created.length, 0)
         onClose()
         return
       }
@@ -135,8 +170,11 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
           ? `成功上传 ${created.length} 张，还有 ${failed.length} 张没上传。再点一次「收进来」接着传就好啦`
           : `这 ${failed.length} 张都没传上去，可能是网络断了，再点一次试试。`
       )
+      /* 面板已经关了，上面那段话他看不见 —— 至少让 toast 说一声 */
+      if (!openRef.current) onDone(created.length, failed.length)
     } catch (err) {
       setError(err instanceof Error ? err.message : '上传失败，检查一下网络')
+      if (!openRef.current) onDone(0, items.length)
     } finally {
       setBusy(false)
     }
@@ -259,7 +297,11 @@ export function UploadSheet({ open, onClose, onSubmit, onDone }: Props) {
 
         <div className="sheet-foot">
           <span className="tip">
-            {remaining > 0 ? `已就绪 ${remaining} 张` : '一次可以放很多张'}
+            {busy
+              ? '正在处理 · 关掉也不会中断'
+              : remaining > 0
+                ? `已就绪 ${remaining} 张`
+                : '一次可以放很多张'}
           </span>
           <div className="actions">
             <button type="button" className="text-btn" onClick={onClose}>

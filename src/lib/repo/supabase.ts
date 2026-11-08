@@ -117,6 +117,13 @@ export class SupabaseRepo implements Repo {
       .select('id,storage_key,width,height,taken_at,caption,featured_at,created_at,deleted_at')
       .is('deleted_at', null)
       .order('taken_at', { ascending: true })
+      /*
+       * 时间戳撞车必须要有第二排序键：同一秒连拍、EXIF 读不到退回文件
+       * 修改时间，都会产生相同的 taken_at。没有 tiebreak 时数据库不保证
+       * 两次查询给出同样的顺序，而 useAlbum 的 photoSig 是**按顺序**拼的
+       * —— 顺序一抖就判定「数据变了」，整条时间轴白重排一次。
+       */
+      .order('created_at', { ascending: true })
     if (error) throw error
     return (data as PhotoRow[]).map(toPhoto)
   }
@@ -190,16 +197,30 @@ export class SupabaseRepo implements Repo {
     if ('caption' in patch) row.caption = patch.caption
     if ('featuredAt' in patch) row.featured_at = patch.featuredAt
     if (!Object.keys(row).length) return
-    const { error } = await this.client.from('photos').update(row).eq('id', id)
+    /*
+     * 必须 .select('id') 拿回被改的行：RLS 没有 update 策略时 PostgREST
+     * 会返回 204 且不带错误，界面就会以为改好了、刷新才发现是原样。
+     * 和 setPlanDone 同一个道理 —— README 里那条应急操作（外泄时删掉
+     * photos 的 update 策略）会让这里静默失败，所以这道校验是必需品。
+     */
+    const { data, error } = await this.client
+      .from('photos')
+      .update(row)
+      .eq('id', id)
+      .select('id')
     if (error) throw error
+    if (!data?.length) throw new Error('照片没写进去（photos 缺少 update 策略？）')
   }
 
   async softDeletePhoto(id: string): Promise<void> {
-    const { error } = await this.client
+    // 同上：0 行意味着「没删掉」，不能当成成功
+    const { data, error } = await this.client
       .from('photos')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
+      .select('id')
     if (error) throw error
+    if (!data?.length) throw new Error('照片没能移出相册（photos 缺少 update 策略？）')
   }
 
   async countMessages(): Promise<Record<string, number>> {

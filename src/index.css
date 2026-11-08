@@ -64,9 +64,8 @@
   /* 首页那个数字。clamp 让它在 320px 的屏上也不溢出，不必再写媒体查询 */
   --fs-hero: clamp(64px, 22vw, 168px);
   /*
-   * 时 / 分 / 秒。2026-11-08 抬过一档（原 26/8vw/44）：
-   * kicker 与脚注双双翻倍之后，副数字停在 44 会被压成配角，
-   * 层级就散了。上限取 56 —— 天数那格是 168，仍差三倍，主次还在。
+   * 时 / 分 / 秒。2026-11-08 从 26/8vw/44 抬到 34/10vw/56。
+   * 上限取 56 —— 天数那格是 168，仍差三倍，主次还在。
    * 下限卡 34 是为 320px 的屏留的：四格 + 三道 gap 合计仍小于舞台宽度。
    */
   --fs-hero-sub: clamp(34px, 10vw, 56px);
@@ -2248,21 +2247,22 @@ html[data-scroll='locked'] .page-scroll {
 }
 
 /*
- * kicker / 脚注：2026-11-08 用户要求字号翻倍。
+ * kicker：单位字再大半档（--fs-read + 4px，今天正好 20px）。
  *
- * 用 calc 而不是写死 32px / 24px —— 「两倍于哪一档」这个意图要留在代码里，
- * 否则下一个人看到 32px 只会以为是随手挑的数。
+ * 2026-11-08 这一行试过 16（和单位字同档）→ 32（翻倍）→ 16 → 20：
+ * 完全同档时它读起来像脚注，翻倍又抢了数字的视线；比单位字大 4px
+ * 是那条「它是说明、但得先读得清」的线。
  *
- * 字距从 --ls-display（0.14em）降到 --ls-title（0.08em）：
- * 0.14em 是给 6 个字母的品牌名定的，放到 32px 的十七字长句上，
- * 每字之间空出 4.5px，读起来是「散开」而不是「排出来」。0.08em 在 32px 上
- * 约合 2.6px，和原来 16px × 0.14em 的绝对间距几乎一致 —— 放大字号就该收紧比例。
+ * 用 calc 而不是写死 20px：这行的定位是「比单位字大一点」，
+ * 单位档位将来变了它应该跟着走。
  *
- * text-align 是防御：手机屏幕上这行会折成两行，不居中会左对齐得很别扭。
+ * 字距留在 --ls-title（0.08em），不回 --ls-display（0.14em）：
+ * 十七字的长句按 0.14em 排会散成一条。
+ * text-align 是防御：窄屏万一折行，不居中会左对齐得很别扭。
  */
 .timer-kicker {
   margin: 0;
-  font-size: calc(var(--fs-read) * 2);
+  font-size: calc(var(--fs-read) + 4px);
   letter-spacing: var(--ls-title);
   text-align: center;
   color: var(--ink-soft);
@@ -2315,9 +2315,10 @@ html[data-scroll='locked'] .page-scroll {
   color: var(--ink-faint);
 }
 
+/* 脚注：和「天 / 时 / 分 / 秒」四个单位字同档，不跟着 kicker 走 */
 .timer-foot {
   margin: 0;
-  font-size: calc(var(--fs-meta) * 2);
+  font-size: var(--fs-read);
   letter-spacing: var(--ls-meta);
   color: var(--ink-ghost);
 }

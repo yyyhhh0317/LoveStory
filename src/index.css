@@ -63,7 +63,13 @@
   --fs-display: 19px;
   /* 首页那个数字。clamp 让它在 320px 的屏上也不溢出，不必再写媒体查询 */
   --fs-hero: clamp(64px, 22vw, 168px);
-  --fs-hero-sub: clamp(26px, 8vw, 44px);
+  /*
+   * 时 / 分 / 秒。2026-11-08 抬过一档（原 26/8vw/44）：
+   * kicker 与脚注双双翻倍之后，副数字停在 44 会被压成配角，
+   * 层级就散了。上限取 56 —— 天数那格是 168，仍差三倍，主次还在。
+   * 下限卡 34 是为 320px 的屏留的：四格 + 三道 gap 合计仍小于舞台宽度。
+   */
+  --fs-hero-sub: clamp(34px, 10vw, 56px);
 
   /* ---------- 行高 / 字距 ---------- */
   --lh-flat: 1;
@@ -2241,10 +2247,24 @@ html[data-scroll='locked'] .page-scroll {
   transition: none;
 }
 
+/*
+ * kicker / 脚注：2026-11-08 用户要求字号翻倍。
+ *
+ * 用 calc 而不是写死 32px / 24px —— 「两倍于哪一档」这个意图要留在代码里，
+ * 否则下一个人看到 32px 只会以为是随手挑的数。
+ *
+ * 字距从 --ls-display（0.14em）降到 --ls-title（0.08em）：
+ * 0.14em 是给 6 个字母的品牌名定的，放到 32px 的十七字长句上，
+ * 每字之间空出 4.5px，读起来是「散开」而不是「排出来」。0.08em 在 32px 上
+ * 约合 2.6px，和原来 16px × 0.14em 的绝对间距几乎一致 —— 放大字号就该收紧比例。
+ *
+ * text-align 是防御：手机屏幕上这行会折成两行，不居中会左对齐得很别扭。
+ */
 .timer-kicker {
   margin: 0;
-  font-size: var(--fs-read);
-  letter-spacing: var(--ls-display);
+  font-size: calc(var(--fs-read) * 2);
+  letter-spacing: var(--ls-title);
+  text-align: center;
   color: var(--ink-soft);
 }
 
@@ -2287,16 +2307,17 @@ html[data-scroll='locked'] .page-scroll {
   font-size: var(--fs-hero);
 }
 
+/* 时 / 分 / 秒三个字：与副数字同比放大，12px 在 56px 的数字旁边太小了 */
 .tt-unit {
   font-style: normal;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-read);
   letter-spacing: var(--ls-ui);
   color: var(--ink-faint);
 }
 
 .timer-foot {
   margin: 0;
-  font-size: var(--fs-meta);
+  font-size: calc(var(--fs-meta) * 2);
   letter-spacing: var(--ls-meta);
   color: var(--ink-ghost);
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { START_AT, elapsedSentence, elapsedSince } from '../lib/timer'
-import { formatDayCn, pad } from '../lib/format'
+import { formatDay, pad } from '../lib/format'
 
 /**
  * 对齐到整秒的自校准定时器。
@@ -82,8 +82,14 @@ export function TogetherTimer() {
         </div>
       </div>
 
+      {/*
+        * 脚注用数字日期而不是「2025 年 3 月 17 日」：
+        * 上面四个数都是 sans + tnum，脚注也走数字才跟它们同族；
+        * 汉字那版有 16 字宽，比主体天数还宽，脚注抢了版面的宽度。
+        * 补零点分沿用 formatDay，与留言板里超过一周的日期同一种写法。
+        */}
       <p className="timer-foot">
-        {e.pending ? '这一天还没到' : `从 ${formatDayCn(START_AT.toISOString())} 起`}
+        {e.pending ? '这一天还没到' : `${formatDay(START_AT.toISOString())} 起`}
       </p>
 
       {/* 每秒播报是灾难，所以 aria-live 关着；这句只在读屏用户路过时才念 */}
